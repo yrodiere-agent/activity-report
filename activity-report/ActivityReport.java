@@ -1195,9 +1195,9 @@ public class ActivityReport implements QuarkusApplication {
     // ============================================================================
 
     @Command(
-        name = "activity-report",
+        name = "report",
         mixinStandardHelpOptions = true,
-        version = "activity-report 1.0",
+        version = "report 1.0",
         description = "Generate activity reports from GitHub, JIRA, Zulip, and other sources"
     )
     public static class ActivityReportCommand implements Runnable {
