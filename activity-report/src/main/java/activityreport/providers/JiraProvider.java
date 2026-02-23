@@ -1,16 +1,17 @@
 package activityreport.providers;
 
+import activityreport.client.BasicAuthRequestFilter;
+import activityreport.client.JiraRestClient;
 import activityreport.config.AppConfig;
 import activityreport.model.Activity;
 import activityreport.model.ActivityProvider;
 import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import org.eclipse.microprofile.rest.client.RestClientBuilder;
 
-import java.io.IOException;
+import java.net.URI;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
-import java.util.Base64;
 import java.util.List;
 
 /**
@@ -66,43 +67,20 @@ public class JiraProvider implements ActivityProvider {
     private List<Activity> fetchFromInstance(JiraInstance instance, Instant startDate, Instant endDate) throws Exception {
         List<Activity> activities = new ArrayList<>();
 
-        // Create Basic Auth header
-        var auth = Base64.getEncoder().encodeToString(
-            (instance.email + ":" + instance.token).getBytes()
-        );
+        // Build REST client for this instance
+        var client = RestClientBuilder.newBuilder()
+            .baseUri(URI.create(instance.url))
+            .connectTimeout(30, java.util.concurrent.TimeUnit.SECONDS)
+            .readTimeout(60, java.util.concurrent.TimeUnit.SECONDS)
+            .register(new BasicAuthRequestFilter(instance.email, instance.token))
+            .build(JiraRestClient.class);
 
         // Build JQL query
         long daysAgo = Duration.between(startDate, Instant.now()).toDays();
         var jql = String.format("assignee = currentUser() AND updated >= -%dd ORDER BY updated DESC", daysAgo + 1);
 
-        // Make HTTP request using java.net.http
-        var httpClient = java.net.http.HttpClient.newBuilder()
-            .connectTimeout(Duration.ofSeconds(30))
-            .build();
-
-        var url = instance.url + "/rest/api/3/search?jql=" +
-            java.net.URLEncoder.encode(jql, java.nio.charset.StandardCharsets.UTF_8) +
-            "&fields=key,summary,status,created,updated,issuetype&maxResults=100";
-
-        var request = java.net.http.HttpRequest.newBuilder()
-            .uri(java.net.URI.create(url))
-            .header("Authorization", "Basic " + auth)
-            .header("Accept", "application/json")
-            .GET()
-            .build();
-
-        var response = httpClient.send(
-            request,
-            java.net.http.HttpResponse.BodyHandlers.ofString()
-        );
-
-        if (response.statusCode() != 200) {
-            throw new IOException("JIRA API returned status " + response.statusCode() + ": " + response.body());
-        }
-
-        // Parse JSON response
-        var mapper = new ObjectMapper();
-        var root = mapper.readTree(response.body());
+        // Make API call
+        var root = client.search(jql, "key,summary,status,created,updated,issuetype", 100);
         var issues = root.get("issues");
 
         if (issues != null && issues.isArray()) {

@@ -1,12 +1,13 @@
 package activityreport.report;
 
+import activityreport.client.AIRestClient;
 import activityreport.config.AppConfig;
 import activityreport.model.Activity;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
+import org.eclipse.microprofile.rest.client.RestClientBuilder;
 
-import java.io.IOException;
-import java.time.Duration;
+import java.net.URI;
 import java.time.Instant;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
@@ -17,14 +18,22 @@ import java.util.stream.Collectors;
  * AI Processor for generating intelligent, grouped activity reports
  */
 public class AIProcessor {
-    private final String aiUrl;
+    private final AIRestClient client;
     private final String modelName;
     private final ObjectMapper mapper;
 
     public AIProcessor(AppConfig config) {
-        this.aiUrl = config.ai()
+        String aiUrl = config.ai()
             .flatMap(ai -> ai.url())
             .orElse("http://localhost:8000/v1");
+
+        // Build REST client
+        this.client = RestClientBuilder.newBuilder()
+            .baseUri(URI.create(aiUrl))
+            .connectTimeout(10, java.util.concurrent.TimeUnit.SECONDS)
+            .readTimeout(120, java.util.concurrent.TimeUnit.SECONDS)
+            .build(AIRestClient.class);
+
         this.mapper = new ObjectMapper();
         this.mapper.registerModule(new JavaTimeModule());
 
@@ -45,29 +54,12 @@ public class AIProcessor {
 
     private String detectModel() {
         try {
-            var httpClient = java.net.http.HttpClient.newBuilder()
-                .connectTimeout(Duration.ofSeconds(10))
-                .build();
-
-            var request = java.net.http.HttpRequest.newBuilder()
-                .uri(java.net.URI.create(aiUrl + "/models"))
-                .header("Accept", "application/json")
-                .GET()
-                .build();
-
-            var response = httpClient.send(
-                request,
-                java.net.http.HttpResponse.BodyHandlers.ofString()
-            );
-
-            if (response.statusCode() == 200) {
-                var root = mapper.readTree(response.body());
-                var data = root.get("data");
-                if (data != null && data.isArray() && !data.isEmpty()) {
-                    var model = data.get(0).get("id").asText();
-                    System.err.println("Auto-detected AI model: " + model);
-                    return model;
-                }
+            var root = client.listModels();
+            var data = root.get("data");
+            if (data != null && data.isArray() && !data.isEmpty()) {
+                var model = data.get(0).get("id").asText();
+                System.err.println("Auto-detected AI model: " + model);
+                return model;
             }
         } catch (Exception e) {
             System.err.println("Warning: Could not auto-detect AI model: " + e.getMessage());
@@ -158,10 +150,6 @@ public class AIProcessor {
     }
 
     private String callAIModel(String prompt) throws Exception {
-        var httpClient = java.net.http.HttpClient.newBuilder()
-            .connectTimeout(Duration.ofSeconds(30))
-            .build();
-
         // Build request body
         var requestBody = new LinkedHashMap<String, Object>();
         requestBody.put("model", modelName);
@@ -171,27 +159,10 @@ public class AIProcessor {
         requestBody.put("temperature", 0.7);
         requestBody.put("max_tokens", 2000);
 
-        var requestJson = mapper.writeValueAsString(requestBody);
-
-        var request = java.net.http.HttpRequest.newBuilder()
-            .uri(java.net.URI.create(aiUrl + "/chat/completions"))
-            .header("Content-Type", "application/json")
-            .header("Accept", "application/json")
-            .POST(java.net.http.HttpRequest.BodyPublishers.ofString(requestJson))
-            .timeout(Duration.ofMinutes(2))
-            .build();
-
-        var response = httpClient.send(
-            request,
-            java.net.http.HttpResponse.BodyHandlers.ofString()
-        );
-
-        if (response.statusCode() != 200) {
-            throw new IOException("AI API returned status " + response.statusCode() + ": " + response.body());
-        }
+        // Make API call
+        var root = client.chatCompletion(requestBody);
 
         // Parse response
-        var root = mapper.readTree(response.body());
         var choices = root.get("choices");
         if (choices != null && choices.isArray() && !choices.isEmpty()) {
             var message = choices.get(0).get("message");
@@ -200,6 +171,6 @@ public class AIProcessor {
             }
         }
 
-        throw new IOException("Unexpected AI API response format");
+        throw new RuntimeException("Unexpected AI API response format");
     }
 }

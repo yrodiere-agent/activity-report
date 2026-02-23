@@ -1,16 +1,16 @@
 package activityreport.providers;
 
+import activityreport.client.BasicAuthRequestFilter;
+import activityreport.client.ZulipRestClient;
 import activityreport.config.AppConfig;
 import activityreport.model.Activity;
 import activityreport.model.ActivityProvider;
 import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import org.eclipse.microprofile.rest.client.RestClientBuilder;
 
-import java.io.IOException;
-import java.time.Duration;
+import java.net.URI;
 import java.time.Instant;
 import java.util.ArrayList;
-import java.util.Base64;
 import java.util.List;
 
 /**
@@ -65,56 +65,21 @@ public class ZulipProvider implements ActivityProvider {
     private List<Activity> fetchFromInstance(ZulipInstance instance, Instant startDate, Instant endDate) throws Exception {
         List<Activity> activities = new ArrayList<>();
 
-        // Get current user ID first
-        var httpClient = java.net.http.HttpClient.newBuilder()
-            .connectTimeout(Duration.ofSeconds(30))
-            .build();
-
-        var auth = Base64.getEncoder().encodeToString(
-            (instance.email + ":" + instance.apiKey).getBytes()
-        );
+        // Build REST client for this instance
+        var client = RestClientBuilder.newBuilder()
+            .baseUri(URI.create(instance.url))
+            .connectTimeout(30, java.util.concurrent.TimeUnit.SECONDS)
+            .readTimeout(60, java.util.concurrent.TimeUnit.SECONDS)
+            .register(new BasicAuthRequestFilter(instance.email, instance.apiKey))
+            .build(ZulipRestClient.class);
 
         // Get current user
-        var userRequest = java.net.http.HttpRequest.newBuilder()
-            .uri(java.net.URI.create(instance.url + "/api/v1/users/me"))
-            .header("Authorization", "Basic " + auth)
-            .GET()
-            .build();
-
-        var userResponse = httpClient.send(
-            userRequest,
-            java.net.http.HttpResponse.BodyHandlers.ofString()
-        );
-
-        if (userResponse.statusCode() != 200) {
-            throw new IOException("Zulip API returned status " + userResponse.statusCode());
-        }
-
-        var mapper = new ObjectMapper();
-        var userRoot = mapper.readTree(userResponse.body());
+        var userRoot = client.getCurrentUser();
         int userId = userRoot.get("user_id").asInt();
 
         // Fetch messages sent by this user
         var narrow = String.format("[{\"operator\":\"sender\",\"operand\":%d}]", userId);
-        var messagesUrl = instance.url + "/api/v1/messages?anchor=newest&num_before=1000&num_after=0&narrow=" +
-            java.net.URLEncoder.encode(narrow, java.nio.charset.StandardCharsets.UTF_8);
-
-        var messagesRequest = java.net.http.HttpRequest.newBuilder()
-            .uri(java.net.URI.create(messagesUrl))
-            .header("Authorization", "Basic " + auth)
-            .GET()
-            .build();
-
-        var messagesResponse = httpClient.send(
-            messagesRequest,
-            java.net.http.HttpResponse.BodyHandlers.ofString()
-        );
-
-        if (messagesResponse.statusCode() != 200) {
-            throw new IOException("Zulip messages API returned status " + messagesResponse.statusCode());
-        }
-
-        var messagesRoot = mapper.readTree(messagesResponse.body());
+        var messagesRoot = client.getMessages("newest", 1000, 0, narrow);
         var messages = messagesRoot.get("messages");
 
         if (messages != null && messages.isArray()) {
