@@ -23,22 +23,21 @@ public class XdgYamlConfigSourceFactory implements ConfigSourceFactory {
 
     @Override
     public Iterable<ConfigSource> getConfigSources(ConfigSourceContext context) {
-        Path configPath = findConfigFile();
+        Path configPath = getDefaultConfigPath();
 
-        if (configPath != null && Files.exists(configPath)) {
+        if (Files.exists(configPath)) {
             try {
                 YamlConfigSource yamlSource = new YamlConfigSource(configPath.toUri().toURL(), 275);
                 return Collections.singletonList(yamlSource);
             } catch (IOException e) {
-                System.err.println("Warning: Failed to load configuration from " + configPath + ": " + e.getMessage());
+                throw new IllegalStateException("Failed to load configuration from " + configPath + ": " + e.getMessage(), e);
             }
         } else {
-            System.err.println("Warning: Configuration file not found. Looked in: " +
-                (configPath != null ? configPath : getDefaultConfigPath()));
-            System.err.println("Please create a configuration file. See config.yaml.example for reference.");
+            throw new IllegalStateException(
+                "Configuration file not found. Looked in: " + configPath +
+                "\nPlease create a configuration file. See config.yaml.example for reference."
+            );
         }
-
-        return Collections.emptyList();
     }
 
     @Override
@@ -46,20 +45,6 @@ public class XdgYamlConfigSourceFactory implements ConfigSourceFactory {
         // Priority 275 is between application.properties (250) and system properties (300)
         // This allows command-line/env vars to override config file, but config file overrides application.properties
         return OptionalInt.of(275);
-    }
-
-    /**
-     * Find the configuration file in XDG-compliant locations.
-     * Returns the first existing file, or the default path if none exist.
-     */
-    private Path findConfigFile() {
-        Path configPath = getDefaultConfigPath();
-
-        if (Files.exists(configPath)) {
-            return configPath;
-        }
-
-        return configPath; // Return default path even if it doesn't exist (for error messages)
     }
 
     /**
