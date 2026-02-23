@@ -46,7 +46,9 @@ A command-line tool that generates intelligent activity reports from multiple so
 
 ## Configuration
 
-The tool follows the XDG Base Directory Specification for configuration files.
+The tool follows the XDG Base Directory Specification for configuration files. Configuration is loaded automatically from:
+- `$XDG_CONFIG_HOME/activity-report/config.yaml` (if `XDG_CONFIG_HOME` is set)
+- `~/.config/activity-report/config.yaml` (default)
 
 1. **Create configuration directory**:
    ```bash
@@ -63,6 +65,8 @@ The tool follows the XDG Base Directory Specification for configuration files.
    # Use your favorite editor
    vim ~/.config/activity-report/config.yaml
    ```
+
+**Note:** The configuration file location cannot be customized via command-line options. Use the `XDG_CONFIG_HOME` environment variable if you need a non-standard location.
 
 4. **Set up API tokens**:
 
@@ -124,11 +128,6 @@ report --start-date 2024-02-01 --end-date 2024-02-15
 report --no-ai
 ```
 
-### Custom Configuration File
-
-```bash
-report --config /path/to/custom-config.yaml
-```
 
 ### Save Report to File
 
@@ -143,7 +142,6 @@ report --help
 ```
 
 Options:
-- `-c, --config <path>`: Path to configuration file (default: `$XDG_CONFIG_HOME/activity-report/config.yaml` or `~/.config/activity-report/config.yaml`)
 - `-d, --days <N>`: Number of days to look back (default: 7)
 - `--start-date <YYYY-MM-DD>`: Start date for custom range
 - `--end-date <YYYY-MM-DD>`: End date for custom range

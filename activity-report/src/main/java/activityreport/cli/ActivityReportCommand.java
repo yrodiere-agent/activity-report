@@ -8,6 +8,7 @@ import activityreport.providers.JiraProvider;
 import activityreport.providers.ZulipProvider;
 import activityreport.report.AIProcessor;
 import activityreport.report.MarkdownReportGenerator;
+import jakarta.inject.Inject;
 import picocli.CommandLine.Command;
 import picocli.CommandLine.Option;
 
@@ -27,8 +28,8 @@ import java.util.List;
 )
 public class ActivityReportCommand implements Runnable {
 
-    @Option(names = {"-c", "--config"}, description = "Path to configuration file (default: $XDG_CONFIG_HOME/activity-report/config.yaml)")
-    private String configPath;
+    @Inject
+    AppConfig config;
 
     @Option(names = {"-d", "--days"}, description = "Number of days to look back (default: 7)")
     private int days = 7;
@@ -43,16 +44,43 @@ public class ActivityReportCommand implements Runnable {
     private boolean noAi = false;
 
     /**
-     * Get the default configuration file path following XDG Base Directory Specification.
-     * Returns $XDG_CONFIG_HOME/activity-report/config.yaml if XDG_CONFIG_HOME is set,
-     * otherwise ~/.config/activity-report/config.yaml
+     * Validate the configuration to ensure at least one provider is enabled and properly configured.
      */
-    private static String getDefaultConfigPath() {
-        String xdgConfigHome = System.getenv("XDG_CONFIG_HOME");
-        if (xdgConfigHome != null && !xdgConfigHome.isEmpty()) {
-            return xdgConfigHome + "/activity-report/config.yaml";
+    private void validateConfig() {
+        if (config.providers() == null) {
+            throw new IllegalStateException("No providers configured");
         }
-        return System.getProperty("user.home") + "/.config/activity-report/config.yaml";
+
+        // Check if at least one provider is enabled
+        boolean hasEnabledProvider = false;
+
+        if (config.providers().github().map(g -> g.enabled()).orElse(false)) {
+            hasEnabledProvider = true;
+            if (config.providers().github().get().instances() == null ||
+                config.providers().github().get().instances().isEmpty()) {
+                throw new IllegalStateException("GitHub is enabled but no instances are configured");
+            }
+        }
+
+        if (config.providers().jira().map(j -> j.enabled()).orElse(false)) {
+            hasEnabledProvider = true;
+            if (config.providers().jira().get().instances() == null ||
+                config.providers().jira().get().instances().isEmpty()) {
+                throw new IllegalStateException("JIRA is enabled but no instances are configured");
+            }
+        }
+
+        if (config.providers().zulip().map(z -> z.enabled()).orElse(false)) {
+            hasEnabledProvider = true;
+            if (config.providers().zulip().get().instances() == null ||
+                config.providers().zulip().get().instances().isEmpty()) {
+                throw new IllegalStateException("Zulip is enabled but no instances are configured");
+            }
+        }
+
+        if (!hasEnabledProvider) {
+            throw new IllegalStateException("No providers are enabled. Please enable at least one provider in the configuration.");
+        }
     }
 
     @Override
@@ -61,10 +89,8 @@ public class ActivityReportCommand implements Runnable {
             System.err.println("Activity Report Generator");
             System.err.println("=========================\n");
 
-            // Load configuration
-            System.err.println("Loading configuration...");
-            String effectiveConfigPath = configPath != null ? configPath : getDefaultConfigPath();
-            var config = AppConfig.loadConfig(effectiveConfigPath);
+            // Validate configuration
+            validateConfig();
             System.err.println("Configuration loaded successfully.\n");
 
             // Determine date range
