@@ -27,7 +27,7 @@ import java.util.List;
 )
 public class ActivityReportCommand implements Runnable {
 
-    @Option(names = {"-c", "--config"}, description = "Path to configuration file (default: ~/.activity-report/config.yaml)")
+    @Option(names = {"-c", "--config"}, description = "Path to configuration file (default: $XDG_CONFIG_HOME/activity-report/config.yaml)")
     private String configPath;
 
     @Option(names = {"-d", "--days"}, description = "Number of days to look back (default: 7)")
@@ -42,6 +42,19 @@ public class ActivityReportCommand implements Runnable {
     @Option(names = {"--no-ai"}, description = "Disable AI processing and use simple markdown generation")
     private boolean noAi = false;
 
+    /**
+     * Get the default configuration file path following XDG Base Directory Specification.
+     * Returns $XDG_CONFIG_HOME/activity-report/config.yaml if XDG_CONFIG_HOME is set,
+     * otherwise ~/.config/activity-report/config.yaml
+     */
+    private static String getDefaultConfigPath() {
+        String xdgConfigHome = System.getenv("XDG_CONFIG_HOME");
+        if (xdgConfigHome != null && !xdgConfigHome.isEmpty()) {
+            return xdgConfigHome + "/activity-report/config.yaml";
+        }
+        return System.getProperty("user.home") + "/.config/activity-report/config.yaml";
+    }
+
     @Override
     public void run() {
         try {
@@ -50,8 +63,7 @@ public class ActivityReportCommand implements Runnable {
 
             // Load configuration
             System.err.println("Loading configuration...");
-            String effectiveConfigPath = configPath != null ? configPath :
-                System.getProperty("user.home") + "/.activity-report/config.yaml";
+            String effectiveConfigPath = configPath != null ? configPath : getDefaultConfigPath();
             var config = AppConfig.loadConfig(effectiveConfigPath);
             System.err.println("Configuration loaded successfully.\n");
 

@@ -46,20 +46,22 @@ A command-line tool that generates intelligent activity reports from multiple so
 
 ## Configuration
 
+The tool follows the XDG Base Directory Specification for configuration files.
+
 1. **Create configuration directory**:
    ```bash
-   mkdir -p ~/.activity-report
+   mkdir -p ~/.config/activity-report
    ```
 
 2. **Copy the example configuration**:
    ```bash
-   cp config.yaml.example ~/.activity-report/config.yaml
+   cp /path/to/productivity/activity-report/config.yaml.example ~/.config/activity-report/config.yaml
    ```
 
 3. **Edit the configuration** and add your credentials:
    ```bash
    # Use your favorite editor
-   vim ~/.activity-report/config.yaml
+   vim ~/.config/activity-report/config.yaml
    ```
 
 4. **Set up API tokens**:
@@ -141,7 +143,7 @@ report --help
 ```
 
 Options:
-- `-c, --config <path>`: Path to configuration file (default: ~/.activity-report/config.yaml)
+- `-c, --config <path>`: Path to configuration file (default: `$XDG_CONFIG_HOME/activity-report/config.yaml` or `~/.config/activity-report/config.yaml`)
 - `-d, --days <N>`: Number of days to look back (default: 7)
 - `--start-date <YYYY-MM-DD>`: Start date for custom range
 - `--end-date <YYYY-MM-DD>`: End date for custom range
@@ -185,7 +187,9 @@ Without AI (`--no-ai`), you get a simpler chronological listing grouped by sourc
 
 ### "Configuration file not found"
 
-Make sure you've created `~/.activity-report/config.yaml` from the example file.
+Make sure you've created `~/.config/activity-report/config.yaml` from the example file. The tool follows the XDG Base Directory Specification and looks for configuration in:
+1. `$XDG_CONFIG_HOME/activity-report/config.yaml` (if `XDG_CONFIG_HOME` is set)
+2. `~/.config/activity-report/config.yaml` (default)
 
 ### "Environment variable not set"
 
