@@ -1,0 +1,81 @@
+# Activity Report Configuration
+# Copy this file to ~/.activity-report/config.yaml and fill in your credentials
+
+providers:
+  # GitHub (supports multiple instances: GitHub.com and GitHub Enterprise)
+  github:
+    enabled: true
+    instances:
+      # GitHub.com
+      - name: "GitHub.com"
+        url: "https://api.github.com"
+        username: "your-github-username"
+        token: "${GITHUB_TOKEN}"  # Environment variable recommended
+
+      # GitHub Enterprise (optional)
+      # - name: "Company GitHub Enterprise"
+      #   url: "https://github.company.com/api/v3"
+      #   username: "your-ghe-username"
+      #   token: "${GHE_TOKEN}"
+
+  # JIRA (supports multiple instances)
+  jira:
+    enabled: false  # Set to true to enable
+    instances:
+      # Example JIRA Cloud instance
+      # - name: "Project JIRA"
+      #   url: "https://yourcompany.atlassian.net"
+      #   email: "your-email@example.com"
+      #   token: "${JIRA_TOKEN}"  # Create at: https://id.atlassian.com/manage-profile/security/api-tokens
+
+      # Example JIRA Server instance
+      # - name: "Internal JIRA"
+      #   url: "https://jira.company.com"
+      #   email: "your-email@example.com"
+      #   token: "${JIRA_INTERNAL_TOKEN}"
+
+  # Zulip (supports multiple instances)
+  zulip:
+    enabled: false  # Set to true to enable
+    instances:
+      # Example Zulip instance
+      # - url: "https://yourcompany.zulipchat.com"
+      #   email: "your-email@example.com"
+      #   api_key: "${ZULIP_API_KEY}"  # Get from: Settings -> Account & privacy -> API key
+
+# AI Configuration (for intelligent report grouping)
+ai:
+  url: "http://localhost:8000/v1"  # Podman AI Lab default endpoint
+  model: "auto"  # auto-detect from API, or specify model name
+
+# How to get API tokens:
+#
+# GitHub:
+#   1. Go to: https://github.com/settings/tokens
+#   2. Click "Generate new token (classic)"
+#   3. Select scopes: repo, read:user, user:email
+#   4. Copy token and set as environment variable: export GITHUB_TOKEN="your_token"
+#
+# GitHub Enterprise:
+#   Same as GitHub, but use your enterprise instance URL
+#
+# JIRA Cloud:
+#   1. Go to: https://id.atlassian.com/manage-profile/security/api-tokens
+#   2. Click "Create API token"
+#   3. Copy token and set as environment variable: export JIRA_TOKEN="your_token"
+#
+# JIRA Server/Data Center:
+#   Use your JIRA password or create a personal access token in JIRA settings
+#
+# Zulip:
+#   1. Log in to your Zulip instance
+#   2. Go to: Settings -> Account & privacy
+#   3. Scroll to "API key" section
+#   4. Click "Show/change your API key"
+#   5. Copy API key and set as environment variable: export ZULIP_API_KEY="your_key"
+#
+# Environment Variables:
+#   Add to your ~/.bashrc or ~/.zshrc:
+#   export GITHUB_TOKEN="ghp_xxxxxxxxxxxxx"
+#   export JIRA_TOKEN="xxxxxxxxxxxxx"
+#   export ZULIP_API_KEY="xxxxxxxxxxxxx"
