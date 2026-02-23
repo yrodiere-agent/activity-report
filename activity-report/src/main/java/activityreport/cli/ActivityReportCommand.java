@@ -9,7 +9,9 @@ import activityreport.providers.ZulipProvider;
 import activityreport.report.AIProcessor;
 import activityreport.report.MarkdownReportGenerator;
 import jakarta.inject.Inject;
+import org.eclipse.microprofile.config.ConfigProvider;
 import picocli.CommandLine.Command;
+import picocli.CommandLine.IVersionProvider;
 import picocli.CommandLine.Option;
 
 import java.time.Duration;
@@ -23,7 +25,7 @@ import java.util.List;
 @Command(
     name = "report",
     mixinStandardHelpOptions = true,
-    version = "report 1.0",
+    versionProvider = ActivityReportCommand.ManifestVersionProvider.class,
     description = "Generate activity reports from GitHub, JIRA, Zulip, and other sources"
 )
 public class ActivityReportCommand implements Runnable {
@@ -194,6 +196,20 @@ public class ActivityReportCommand implements Runnable {
             System.err.println("Error: " + e.getMessage());
             e.printStackTrace(System.err);
             System.exit(1);
+        }
+    }
+
+    /**
+     * Version provider that reads version information from Quarkus configuration.
+     * The version is injected from pom.xml via Maven resource filtering.
+     */
+    static class ManifestVersionProvider implements IVersionProvider {
+        @Override
+        public String[] getVersion() {
+            var config = ConfigProvider.getConfig();
+            String version = config.getOptionalValue("app.version", String.class).orElse("unknown");
+            String name = config.getOptionalValue("app.name", String.class).orElse("report");
+            return new String[] { name + " " + version };
         }
     }
 }
