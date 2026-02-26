@@ -46,7 +46,8 @@ public class ActivityReportCommand implements Runnable {
     private boolean noAi = false;
 
     /**
-     * Validate the configuration to ensure at least one provider is enabled and properly configured.
+     * Validate the configuration file exists.
+     * Detailed validation is handled by Hibernate Validator at startup.
      */
     private void validateConfig() {
         if (config == null || config.providers() == null) {
@@ -56,37 +57,7 @@ public class ActivityReportCommand implements Runnable {
                 "See config.yaml.example for reference."
             );
         }
-
-        // Check if at least one provider is enabled
-        boolean hasEnabledProvider = false;
-
-        if (config.providers().github().map(g -> g.enabled()).orElse(false)) {
-            hasEnabledProvider = true;
-            if (config.providers().github().get().instances() == null ||
-                config.providers().github().get().instances().isEmpty()) {
-                throw new IllegalStateException("GitHub is enabled but no instances are configured");
-            }
-        }
-
-        if (config.providers().jira().map(j -> j.enabled()).orElse(false)) {
-            hasEnabledProvider = true;
-            if (config.providers().jira().get().instances() == null ||
-                config.providers().jira().get().instances().isEmpty()) {
-                throw new IllegalStateException("JIRA is enabled but no instances are configured");
-            }
-        }
-
-        if (config.providers().zulip().map(z -> z.enabled()).orElse(false)) {
-            hasEnabledProvider = true;
-            if (config.providers().zulip().get().instances() == null ||
-                config.providers().zulip().get().instances().isEmpty()) {
-                throw new IllegalStateException("Zulip is enabled but no instances are configured");
-            }
-        }
-
-        if (!hasEnabledProvider) {
-            throw new IllegalStateException("No providers are enabled. Please enable at least one provider in the configuration.");
-        }
+        // All other validation handled by Hibernate Validator at startup
     }
 
     @Override
