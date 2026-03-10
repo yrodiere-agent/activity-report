@@ -35,13 +35,16 @@ public class OnePasswordConfigSource implements ConfigSourceFactory {
 
         if (configValue == null || configValue.getValue() == null) {
             // 1Password not configured - return empty
+            Log.debug("onepassword.environment not configured, skipping 1Password integration");
             return Collections.emptyList();
         }
 
         String environmentId = configValue.getValue();
+        Log.infof("Loading secrets from 1Password environment: %s", environmentId);
         Map<String, String> properties = loadFromOnePassword(environmentId);
 
         if (properties.isEmpty()) {
+            Log.warn("No secrets loaded from 1Password environment (check logs above for errors)");
             return Collections.emptyList();
         }
 
