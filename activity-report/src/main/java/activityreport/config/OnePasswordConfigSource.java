@@ -3,7 +3,6 @@ package activityreport.config;
 import io.quarkus.logging.Log;
 import io.smallrye.config.ConfigSourceContext;
 import io.smallrye.config.ConfigSourceFactory;
-import io.smallrye.config.ConfigValue;
 import org.eclipse.microprofile.config.spi.ConfigSource;
 
 import java.io.BufferedReader;
@@ -17,57 +16,83 @@ import java.util.Set;
 import java.util.concurrent.TimeUnit;
 
 /**
- * ConfigSourceFactory that loads environment variables from a 1Password environment.
+ * ConfigSourceFactory that resolves 1Password secret references in config values.
  *
- * Enable by adding to your config.yaml:
- *   onepassword:
- *     environment: "your-environment-id"
+ * Any config value starting with "op://" will be resolved using the 1Password CLI.
+ * For example, in config.yaml:
+ *   github:
+ *     token: op://vault/github/token
  *
- * When configured, this factory will call `op environment read` to load
- * all environment variables defined in the specified 1Password environment.
+ * All references are resolved in a single authentication session to avoid
+ * multiple authentication prompts.
  */
 public class OnePasswordConfigSource implements ConfigSourceFactory {
 
     @Override
     public Iterable<ConfigSource> getConfigSources(ConfigSourceContext context) {
-        // Read the onepassword.environment config value
-        ConfigValue configValue = context.getValue("onepassword.environment");
-
-        if (configValue == null || configValue.getValue() == null) {
-            // 1Password not configured - return empty
-            Log.debug("onepassword.environment not configured, skipping 1Password integration");
+        if (!isOpCliAvailable()) {
+            // No op CLI available, skip silently
             return Collections.emptyList();
         }
 
-        String environmentId = configValue.getValue();
-        Log.infof("Loading secrets from 1Password environment: %s", environmentId);
-        Map<String, String> properties = loadFromOnePassword(environmentId);
+        // Scan all existing config values for op:// references
+        Map<String, String> resolvedValues = new HashMap<>();
+        Map<String, String> referencesToResolve = new HashMap<>();
 
-        if (properties.isEmpty()) {
-            Log.warn("No secrets loaded from 1Password environment (check logs above for errors)");
+        // Iterate through all config sources to find op:// references
+        for (ConfigSource configSource : context.getConfigSources()) {
+            for (String propertyName : configSource.getPropertyNames()) {
+                String value = configSource.getValue(propertyName);
+                if (value != null && value.startsWith("op://")) {
+                    referencesToResolve.put(propertyName, value);
+                }
+            }
+        }
+
+        if (referencesToResolve.isEmpty()) {
+            Log.debug("No 1Password references (op://) found in configuration");
             return Collections.emptyList();
         }
 
-        // Return a ConfigSource with the loaded properties
+        Log.infof("Found %d 1Password reference(s) to resolve", referencesToResolve.size());
+
+        // Resolve all references (this will authenticate once and reuse the session)
+        for (Map.Entry<String, String> entry : referencesToResolve.entrySet()) {
+            String propertyName = entry.getKey();
+            String reference = entry.getValue();
+            String resolvedValue = readFromOnePassword(reference);
+            if (resolvedValue != null) {
+                resolvedValues.put(propertyName, resolvedValue);
+            }
+        }
+
+        if (resolvedValues.isEmpty()) {
+            Log.warn("No 1Password references could be resolved (check logs above for errors)");
+            return Collections.emptyList();
+        }
+
+        Log.infof("Resolved %d secret(s) from 1Password", resolvedValues.size());
+
+        // Return a ConfigSource with the resolved properties
         ConfigSource source = new ConfigSource() {
             @Override
             public Map<String, String> getProperties() {
-                return new HashMap<>(properties);
+                return new HashMap<>(resolvedValues);
             }
 
             @Override
             public String getValue(String propertyName) {
-                return properties.get(propertyName);
+                return resolvedValues.get(propertyName);
             }
 
             @Override
             public String getName() {
-                return "OnePasswordConfigSource (" + environmentId + ")";
+                return "OnePasswordConfigSource";
             }
 
             @Override
             public Set<String> getPropertyNames() {
-                return properties.keySet();
+                return resolvedValues.keySet();
             }
         };
 
@@ -82,68 +107,66 @@ public class OnePasswordConfigSource implements ConfigSourceFactory {
         return OptionalInt.of(290);
     }
 
-    private Map<String, String> loadFromOnePassword(String envId) {
-        Map<String, String> properties = new HashMap<>();
-
-        if (!isOpCliAvailable()) {
-            Log.errorf("1Password environment configured (%s) but 'op' CLI not found", envId);
-            Log.error("Install from: https://developer.1password.com/docs/cli/get-started/");
-            return properties;
-        }
-
+    private String readFromOnePassword(String reference) {
         try {
-            ProcessBuilder pb = new ProcessBuilder("op", "environment", "read", envId);
+            ProcessBuilder pb = new ProcessBuilder("op", "read", reference);
             Process process = pb.start();
 
-            // Read stdout (the actual environment data)
+            // Read stdout (the secret value)
+            StringBuilder value = new StringBuilder();
             try (BufferedReader reader = new BufferedReader(
                     new InputStreamReader(process.getInputStream(), StandardCharsets.UTF_8))) {
 
                 String line;
                 while ((line = reader.readLine()) != null) {
-                    // Parse KEY=VALUE format
-                    int equalsIndex = line.indexOf('=');
-                    if (equalsIndex > 0) {
-                        String key = line.substring(0, equalsIndex);
-                        String value = line.substring(equalsIndex + 1);
-                        properties.put(key, value);
+                    if (value.length() > 0) {
+                        value.append('\n');
                     }
+                    value.append(line);
                 }
             }
 
             // Read stderr (messages from op CLI)
+            StringBuilder errorOutput = new StringBuilder();
             try (BufferedReader errReader = new BufferedReader(
                     new InputStreamReader(process.getErrorStream(), StandardCharsets.UTF_8))) {
 
                 String errLine;
                 while ((errLine = errReader.readLine()) != null) {
-                    Log.infof("1Password CLI: %s", errLine);
+                    if (errorOutput.length() > 0) {
+                        errorOutput.append('\n');
+                    }
+                    errorOutput.append(errLine);
                 }
             }
 
             boolean completed = process.waitFor(10, TimeUnit.SECONDS);
             if (!completed) {
                 process.destroyForcibly();
-                Log.errorf("1Password CLI timed out reading environment: %s", envId);
-                return properties;
+                Log.errorf("1Password CLI timed out reading: %s", reference);
+                return null;
             }
 
             if (process.exitValue() != 0) {
-                Log.errorf("Failed to read 1Password environment: %s", envId);
-                Log.error("Make sure you're signed in with: op signin");
-                return properties;
+                if (errorOutput.length() > 0) {
+                    Log.errorf("Failed to read %s: %s", reference, errorOutput.toString());
+                } else {
+                    Log.errorf("Failed to read %s (exit code: %d)", reference, process.exitValue());
+                }
+                return null;
             }
 
-            if (!properties.isEmpty()) {
-                Log.infof("Loaded %d secrets from 1Password environment: %s",
-                         properties.size(), envId);
+            // Log stderr output even on success (might contain helpful info)
+            if (errorOutput.length() > 0) {
+                Log.infof("1Password CLI: %s", errorOutput.toString());
             }
+
+            return value.toString();
 
         } catch (Exception e) {
-            Log.errorf("Error loading 1Password environment: %s", e.getMessage());
+            Log.errorf("Error reading 1Password reference %s: %s", reference, e.getMessage());
+            return null;
         }
-
-        return properties;
     }
 
     private boolean isOpCliAvailable() {

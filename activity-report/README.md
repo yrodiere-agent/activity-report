@@ -74,7 +74,7 @@ The tool follows the XDG Base Directory Specification for configuration files. C
 
 **RECOMMENDED: Use 1Password for Secure Secret Storage**
 
-The application can automatically load API tokens from a 1Password environment, providing secure credential storage without exposing tokens in config files or environment variables.
+The application can automatically resolve 1Password secret references in your configuration, providing secure credential storage without exposing tokens in config files or environment variables.
 
 ### Setup with 1Password
 
@@ -88,29 +88,37 @@ The application can automatically load API tokens from a 1Password environment, 
    op signin
    ```
 
-3. **Create a 1Password Environment**:
-   - Go to 1Password web app
-   - Create environment variables for your API tokens:
-     - `GITHUB_TOKEN`
-     - `JIRA_TOKEN`
-     - `ZULIP_API_KEY`
-   - Point them to the corresponding items in your vault
-   - Learn more: https://developer.1password.com/docs/cli/secrets-environment-variables/
+3. **Store your API tokens in 1Password**:
+   - Create items in your vault for each service (e.g., "GitHub", "JIRA")
+   - Store tokens as fields within those items
 
-4. **Configure the application**:
+4. **Use secret references in your config**:
 
-   Add to your `~/.config/activity-report/config.yaml`:
+   In your `~/.config/activity-report/config.yaml`, use `op://` syntax to reference secrets:
    ```yaml
-   onepassword:
-     environment: "your-environment-id"
+   providers:
+     github:
+       enabled: true
+       instances:
+         - name: "GitHub.com"
+           token: op://Private/GitHub/token
+     jira:
+       enabled: true
+       instances:
+         - name: "Work JIRA"
+           token: op://Private/JIRA/api_token
    ```
+
+   The secret reference format is: `op://vault-name/item-name/field-name`
+
+   You can also reference specific sections: `op://vault-name/item-name/section-name/field-name`
 
 5. **Run the application**:
    ```bash
    report
    ```
 
-   The application will automatically call `op environment read` at startup and load all secrets. No wrapper scripts needed!
+   The application will automatically resolve all `op://` references using the 1Password CLI. You'll be prompted to authenticate once, then all secrets are loaded in that session.
 
 ### Alternative: Environment Variables (Without 1Password)
 
