@@ -54,7 +54,7 @@ public class ActivityReportCommand implements Runnable {
         if (config == null || config.providers() == null) {
             throw new IllegalStateException(
                 "Configuration file not found. Please create a configuration file at: " +
-                activityreport.config.XdgYamlConfigSourceFactory.getDefaultConfigPath() + "\n" +
+                activityreport.config.XdgYamlConfigSource.getDefaultConfigPath() + "\n" +
                 "See config.yaml.example for reference."
             );
         }

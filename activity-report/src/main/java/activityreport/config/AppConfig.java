@@ -14,7 +14,7 @@ import java.util.Optional;
 
 /**
  * Main configuration interface using Quarkus ConfigMapping.
- * Configuration is loaded from XDG-compliant locations via XdgYamlConfigSourceFactory.
+ * Configuration is loaded from XDG-compliant locations via XdgYamlConfigSource.
  */
 @ConfigMapping(prefix = "")
 @ValidAppConfig
