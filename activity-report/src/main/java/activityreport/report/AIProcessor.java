@@ -5,25 +5,23 @@ import activityreport.client.TraceClientLogger;
 import activityreport.config.AppConfig;
 import org.jboss.resteasy.reactive.client.api.LoggingScope;
 import activityreport.model.Activity;
+import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import io.quarkus.logging.Log;
 import io.quarkus.rest.client.reactive.QuarkusRestClientBuilder;
 
 import java.net.URI;
-import java.time.Instant;
-import java.time.ZoneId;
-import java.time.format.DateTimeFormatter;
 import java.util.*;
-import java.util.stream.Collectors;
 
 /**
- * AI Processor for generating intelligent, grouped activity reports
+ * AI Processor for enriching and grouping activities
  */
 public class AIProcessor {
     private final AIRestClient client;
     private final String modelName;
     private final ObjectMapper mapper;
+    private final Set<String> availableProjects;
 
     public AIProcessor(AppConfig config) {
         String aiUrl = config.ai()
@@ -41,6 +39,12 @@ public class AIProcessor {
 
         this.mapper = new ObjectMapper();
         this.mapper.registerModule(new JavaTimeModule());
+
+        // Extract available projects from config
+        this.availableProjects = new LinkedHashSet<>();
+        config.projects().ifPresent(projects ->
+            projects.forEach(project -> availableProjects.add(project.name()))
+        );
 
         // Auto-detect model if not specified
         var configuredModel = config.ai()
@@ -72,89 +76,240 @@ public class AIProcessor {
         return null;
     }
 
-    public String generateGroupedReport(List<Activity> activities, Instant startDate, Instant endDate) {
-        if (modelName == null) {
-            Log.info("AI model not available, falling back to simple markdown");
-            return MarkdownReportGenerator.generateSimple(activities, startDate, endDate);
+    public boolean isAvailable() {
+        return modelName != null;
+    }
+
+    /**
+     * Enrich activities by adding descriptions and projects where missing.
+     * Returns a new list with enriched activities.
+     */
+    public List<Activity> enrichActivities(List<Activity> activities) {
+        if (!isAvailable()) {
+            return activities;
         }
 
         try {
-            // Prepare activities as JSON
-            String activitiesJson = serializeActivities(activities);
+            Log.info("AI: Enriching activities with descriptions and projects...");
 
-            // Build prompt
-            DateTimeFormatter dateFormatter = DateTimeFormatter.ofPattern("MMMM d, yyyy")
-                .withZone(ZoneId.systemDefault());
+            // Prepare request
+            List<Map<String, Object>> activitiesJson = new ArrayList<>();
+            for (int i = 0; i < activities.size(); i++) {
+                Activity activity = activities.get(i);
+                Map<String, Object> activityMap = new LinkedHashMap<>();
+                activityMap.put("index", i);
+                activityMap.put("source", activity.source());
+                activityMap.put("action", activity.action());
+                activityMap.put("actionCategory", activity.actionCategory().name());
+                activityMap.put("title", activity.title());
+                activityMap.put("description", activity.description());
+                activityMap.put("url", activity.url());
+                activityMap.put("contentUrls", activity.contentUrls());
+                activityMap.put("project", activity.metadata().get("project"));
+                activitiesJson.add(activityMap);
+            }
+
+            Map<String, Object> requestData = new LinkedHashMap<>();
+            requestData.put("activities", activitiesJson);
+            requestData.put("availableProjects", availableProjects);
 
             String prompt = """
-                You are analyzing a developer's activity from %s to %s.
+                You are enriching developer activities with descriptions and project assignments.
 
-                Your task is to create a concise, achievement-oriented activity report. \
-                Group related activities into coherent achievements. For example, an issue, pull request, \
-                and commits related to the same feature should be grouped together as one achievement.
+                For each activity:
+                1. If it has NO description or an empty description, generate a concise 1-2 sentence description
+                2. If it has NO project assigned, try to assign it to one of the available projects based on the URLs and content
 
-                Guidelines:
-                - Focus on WHAT was accomplished, not just listing actions
-                - Group related items (e.g., issue + PR + commits = one achievement)
-                - Use clear, professional language
-                - Include relevant links from the activities
-                - Be concise but informative
+                Base your decisions on:
+                - The activity's title, URLs (main and content URLs)
+                - Only assign projects that are in the availableProjects list
+                - Only provide descriptions for activities that need them
+                - Keep descriptions professional and concise
 
-                Activities data (JSON):
+                Activities data:
                 %s
 
-                Generate a markdown report with:
-                1. A brief summary paragraph (2-3 sentences)
-                2. Main achievements grouped by theme (use ## headers)
-                3. Include links to relevant issues/PRs where available
-                4. Keep it professional and concise
+                Return ONLY valid JSON (no markdown formatting) with this structure:
+                {
+                  "descriptions": [
+                    {"index": 0, "description": "..."}
+                  ],
+                  "projects": [
+                    {"index": 1, "project": "ProjectName"}
+                  ]
+                }
 
-                Return ONLY the markdown report, nothing else.
-                """.formatted(
-                    dateFormatter.format(startDate),
-                    dateFormatter.format(endDate),
-                    activitiesJson
-                );
+                If no enrichments are needed, return: {"descriptions": [], "projects": []}
+                """.formatted(mapper.writerWithDefaultPrettyPrinter().writeValueAsString(requestData));
 
-            // Make API call
-            return callAIModel(prompt);
+            String response = callAIModel(prompt);
+            JsonNode enrichments = parseJsonResponse(response);
+
+            // Apply enrichments
+            List<Activity> enriched = new ArrayList<>(activities);
+
+            // Apply descriptions
+            if (enrichments.has("descriptions")) {
+                for (JsonNode desc : enrichments.get("descriptions")) {
+                    int index = desc.get("index").asInt();
+                    String description = desc.get("description").asText();
+                    Activity original = enriched.get(index);
+                    enriched.set(index, new Activity(
+                        original.source(),
+                        original.action(),
+                        original.actionCategory(),
+                        original.title(),
+                        description,
+                        original.url(),
+                        original.timestamp(),
+                        original.contentUrls(),
+                        original.metadata()
+                    ));
+                }
+            }
+
+            // Apply projects
+            if (enrichments.has("projects")) {
+                for (JsonNode proj : enrichments.get("projects")) {
+                    int index = proj.get("index").asInt();
+                    String project = proj.get("project").asText();
+                    Activity original = enriched.get(index);
+                    Map<String, Object> newMetadata = new HashMap<>(original.metadata());
+                    newMetadata.put("project", project);
+                    enriched.set(index, new Activity(
+                        original.source(),
+                        original.action(),
+                        original.actionCategory(),
+                        original.title(),
+                        original.description(),
+                        original.url(),
+                        original.timestamp(),
+                        original.contentUrls(),
+                        newMetadata
+                    ));
+                }
+            }
+
+            Log.infof("AI: Enriched %d descriptions and %d projects",
+                enrichments.has("descriptions") ? enrichments.get("descriptions").size() : 0,
+                enrichments.has("projects") ? enrichments.get("projects").size() : 0);
+
+            return enriched;
 
         } catch (Exception e) {
-            Log.warnf("AI processing failed: %s", e.getMessage());
-            Log.info("Falling back to simple markdown generation");
-            return MarkdownReportGenerator.generateSimple(activities, startDate, endDate);
+            Log.warnf("AI enrichment failed: %s", e.getMessage());
+            return activities;
         }
     }
 
-    private String serializeActivities(List<Activity> activities) throws Exception {
-        // Create simplified JSON representation of activities
-        List<Map<String, Object>> simplified = activities.stream()
-            .sorted(Comparator.comparing(Activity::timestamp).reversed())
-            .map(activity -> {
-                Map<String, Object> map = new LinkedHashMap<>();
-                map.put("source", activity.source());
-                map.put("action", activity.action());
-                map.put("title", activity.title());
-                if (activity.description() != null && !activity.description().isEmpty()) {
-                    // Truncate very long descriptions
-                    String desc = activity.description();
-                    if (desc.length() > 500) {
-                        desc = desc.substring(0, 500) + "...";
-                    }
-                    map.put("description", desc);
-                }
-                if (activity.url() != null && !activity.url().isEmpty()) {
-                    map.put("url", activity.url());
-                }
-                if (activity.contentUrls() != null && !activity.contentUrls().isEmpty()) {
-                    map.put("contentUrls", activity.contentUrls());
-                }
-                map.put("timestamp", activity.timestamp().toString());
-                return map;
-            })
-            .collect(Collectors.toList());
+    /**
+     * Group related activities together.
+     * Returns groups of activities.
+     */
+    public List<ActivityGroup> groupActivities(List<Activity> activities) {
+        if (!isAvailable()) {
+            return SimpleGrouper.groupActivities(activities);
+        }
 
-        return mapper.writerWithDefaultPrettyPrinter().writeValueAsString(simplified);
+        try {
+            Log.info("AI: Grouping related activities...");
+
+            // Prepare request
+            List<Map<String, Object>> activitiesJson = new ArrayList<>();
+            for (int i = 0; i < activities.size(); i++) {
+                Activity activity = activities.get(i);
+                Map<String, Object> activityMap = new LinkedHashMap<>();
+                activityMap.put("index", i);
+                activityMap.put("source", activity.source());
+                activityMap.put("action", activity.action());
+                activityMap.put("actionCategory", activity.actionCategory().name());
+                activityMap.put("title", activity.title());
+                activityMap.put("description", truncate(activity.description(), 300));
+                activityMap.put("url", activity.url());
+                activityMap.put("contentUrls", activity.contentUrls());
+                activityMap.put("project", activity.metadata().get("project"));
+                activitiesJson.add(activityMap);
+            }
+
+            String prompt = """
+                You are grouping related developer activities.
+
+                Group activities that are related based on:
+                1. Shared URLs (primary URL or content URLs) - this is the PRIMARY signal
+                2. Same project
+                3. Related titles/descriptions
+
+                Guidelines:
+                - Activities sharing a URL should ALWAYS be grouped together
+                - Within each group, choose ONE primary activity (preferably CODE category)
+                - All others in the group are secondary
+                - Activities can only be in one group
+                - Some activities may remain ungrouped
+
+                Activities data:
+                %s
+
+                Return ONLY valid JSON (no markdown formatting) with this structure:
+                {
+                  "groups": [
+                    {
+                      "primaryIndex": 0,
+                      "secondaryIndices": [1, 2]
+                    }
+                  ]
+                }
+
+                If no grouping is needed, return: {"groups": []}
+                """.formatted(mapper.writerWithDefaultPrettyPrinter().writeValueAsString(activitiesJson));
+
+            String response = callAIModel(prompt);
+            JsonNode groupsData = parseJsonResponse(response);
+
+            // Build groups
+            List<ActivityGroup> groups = new ArrayList<>();
+            Set<Integer> grouped = new HashSet<>();
+
+            if (groupsData.has("groups")) {
+                for (JsonNode groupNode : groupsData.get("groups")) {
+                    int primaryIndex = groupNode.get("primaryIndex").asInt();
+                    Activity primary = activities.get(primaryIndex);
+                    grouped.add(primaryIndex);
+
+                    List<Activity> secondary = new ArrayList<>();
+                    if (groupNode.has("secondaryIndices")) {
+                        for (JsonNode secNode : groupNode.get("secondaryIndices")) {
+                            int secIndex = secNode.asInt();
+                            secondary.add(activities.get(secIndex));
+                            grouped.add(secIndex);
+                        }
+                    }
+
+                    groups.add(new ActivityGroup(primary, secondary));
+                }
+            }
+
+            // Add ungrouped activities
+            for (int i = 0; i < activities.size(); i++) {
+                if (!grouped.contains(i)) {
+                    groups.add(new ActivityGroup(activities.get(i), List.of()));
+                }
+            }
+
+            Log.infof("AI: Created %d groups from %d activities", groups.size(), activities.size());
+
+            return groups;
+
+        } catch (Exception e) {
+            Log.warnf("AI grouping failed: %s", e.getMessage());
+            return SimpleGrouper.groupActivities(activities);
+        }
+    }
+
+    private String truncate(String text, int maxLength) {
+        if (text == null || text.length() <= maxLength) {
+            return text;
+        }
+        return text.substring(0, maxLength) + "...";
     }
 
     private String callAIModel(String prompt) throws Exception {
@@ -164,7 +319,7 @@ public class AIProcessor {
         requestBody.put("messages", List.of(
             Map.of("role", "user", "content", prompt)
         ));
-        requestBody.put("temperature", 0.7);
+        requestBody.put("temperature", 0.3); // Lower temperature for more consistent JSON
         requestBody.put("max_tokens", 2000);
 
         // Make API call
@@ -180,5 +335,21 @@ public class AIProcessor {
         }
 
         throw new RuntimeException("Unexpected AI API response format");
+    }
+
+    private JsonNode parseJsonResponse(String response) throws Exception {
+        // Strip markdown code fences if present
+        String cleaned = response.trim();
+        if (cleaned.startsWith("```json")) {
+            cleaned = cleaned.substring(7);
+        } else if (cleaned.startsWith("```")) {
+            cleaned = cleaned.substring(3);
+        }
+        if (cleaned.endsWith("```")) {
+            cleaned = cleaned.substring(0, cleaned.length() - 3);
+        }
+        cleaned = cleaned.trim();
+
+        return mapper.readTree(cleaned);
     }
 }

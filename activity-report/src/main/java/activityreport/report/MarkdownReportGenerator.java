@@ -3,33 +3,32 @@ package activityreport.report;
 import activityreport.model.ActionCategory;
 import activityreport.model.Activity;
 
-import java.time.Instant;
 import java.util.*;
-import java.util.stream.Collectors;
 
 /**
- * Simple markdown report generator (fallback when AI is disabled)
+ * Markdown report generator working with grouped activities
  */
 public class MarkdownReportGenerator {
 
-    public static String generateSimple(List<Activity> activities, Instant startDate, Instant endDate) {
+    public static String generate(List<ActivityGroup> groups) {
         StringBuilder report = new StringBuilder();
 
-        // Group by project and action category
-        Map<String, List<Activity>> byProject = new LinkedHashMap<>();
+        // Organize groups by project
+        Map<String, List<ActivityGroup>> byProject = new LinkedHashMap<>();
         byProject.put("General", new ArrayList<>()); // Always empty, manually filled
 
-        List<Activity> miscActivities = new ArrayList<>();
+        List<ActivityGroup> miscGroups = new ArrayList<>();
 
-        for (Activity activity : activities) {
-            ActionCategory actionCategory = activity.actionCategory();
-            String project = (String) activity.metadata().get("project");
+        for (ActivityGroup group : groups) {
+            Activity primary = group.primary();
+            ActionCategory actionCategory = primary.actionCategory();
+            String project = (String) primary.metadata().get("project");
 
             // Only CODE activities go to projects, others go to Misc
             if (actionCategory == ActionCategory.CODE && project != null && !project.isEmpty()) {
-                byProject.computeIfAbsent(project, k -> new ArrayList<>()).add(activity);
+                byProject.computeIfAbsent(project, k -> new ArrayList<>()).add(group);
             } else {
-                miscActivities.add(activity);
+                miscGroups.add(group);
             }
         }
 
@@ -39,57 +38,71 @@ public class MarkdownReportGenerator {
         report.append("----\n\n");
 
         // Generate Project sections
-        for (Map.Entry<String, List<Activity>> entry : byProject.entrySet()) {
+        for (Map.Entry<String, List<ActivityGroup>> entry : byProject.entrySet()) {
             String project = entry.getKey();
             if ("General".equals(project)) {
                 continue; // Already handled
             }
 
-            List<Activity> projectActivities = entry.getValue();
-            if (projectActivities.isEmpty()) {
+            List<ActivityGroup> projectGroups = entry.getValue();
+            if (projectGroups.isEmpty()) {
                 continue;
             }
 
             report.append(String.format("# Project: %s\n\n", project));
 
-            for (Activity activity : projectActivities) {
-                formatActivity(report, activity);
+            for (ActivityGroup group : projectGroups) {
+                formatGroup(report, group);
             }
 
-            report.append("\n");
             report.append("----\n\n");
         }
 
         // Generate Misc section (reviews, discussions)
-        if (!miscActivities.isEmpty()) {
+        if (!miscGroups.isEmpty()) {
             report.append("# Misc\n\n");
             report.append("Reviews, triage, discussions\n\n");
 
-            for (Activity activity : miscActivities) {
-                formatActivity(report, activity);
+            for (ActivityGroup group : miscGroups) {
+                formatGroup(report, group);
             }
         }
 
         return report.toString();
     }
 
-    private static void formatActivity(StringBuilder report, Activity activity) {
-        // Main activity line with link
-        if (activity.url() != null && !activity.url().isEmpty()) {
-            report.append(String.format("* [%s](%s)", activity.title(), activity.url()));
+    private static void formatGroup(StringBuilder report, ActivityGroup group) {
+        Activity primary = group.primary();
+
+        // Primary activity line with link
+        if (primary.url() != null && !primary.url().isEmpty()) {
+            report.append(String.format("* [%s](%s)", primary.title(), primary.url()));
         } else {
-            report.append(String.format("* %s", activity.title()));
+            report.append(String.format("* %s", primary.title()));
         }
 
         // Add description if present
-        if (activity.description() != null && !activity.description().isEmpty()) {
+        if (primary.description() != null && !primary.description().isEmpty()) {
             report.append("\n");
-            String[] lines = activity.description().split("\n");
+            String[] lines = primary.description().split("\n");
             for (String line : lines) {
                 line = line.trim();
                 if (!line.isEmpty()) {
                     report.append(String.format("  %s\n", line));
                 }
+            }
+        }
+
+        // Add secondary activities as sub-items
+        if (!group.secondary().isEmpty()) {
+            for (Activity secondary : group.secondary()) {
+                report.append("  - ");
+                if (secondary.url() != null && !secondary.url().isEmpty()) {
+                    report.append(String.format("[%s](%s)", secondary.title(), secondary.url()));
+                } else {
+                    report.append(secondary.title());
+                }
+                report.append("\n");
             }
         }
 

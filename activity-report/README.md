@@ -1,21 +1,23 @@
 # Activity Report CLI Tool
 
-A command-line tool that generates intelligent activity reports from multiple sources (GitHub, JIRA, Zulip) using local AI for smart grouping and summarization.
+A command-line tool that generates intelligent activity reports from multiple sources (GitHub, JIRA, Zulip) using local AI for enrichment and smart grouping.
 
 ## Features
 
 - **Multiple Data Sources**: Fetch activities from GitHub, GitHub Enterprise, JIRA, and Zulip
 - **Multi-Instance Support**: Connect to multiple instances of each provider
-- **AI-Powered Grouping**: Uses local AI (via Podman AI Lab) to intelligently group related activities into coherent achievements
+- **AI-Powered Enrichment**: Uses local AI (via Podman AI Lab) to add descriptions and assign projects to activities
+- **Smart Activity Grouping**: Intelligently groups related activities (issues, PRs, commits) based on shared URLs and context
+- **Project Classification**: Automatically organizes activities into project sections
 - **Flexible Date Ranges**: Query activities for the last N days or specify custom date ranges
 - **Markdown Output**: Generate professional markdown reports suitable for status updates, performance reviews, or team reports
-- **Fallback Mode**: Works without AI using simple markdown generation
+- **Fallback Mode**: Works without AI using simple URL-based grouping
 
 ## Prerequisites
 
 - **Java 21+**: Required to run the application
 - **JBang**: For easy execution (install from https://www.jbang.dev)
-- **Podman AI Lab** (optional): For AI-powered report generation (https://podman-desktop.io/extensions/ai-lab)
+- **Podman AI Lab** (optional): For AI-powered enrichment and grouping (https://podman-desktop.io/extensions/ai-lab)
 
 ## Installation
 
@@ -154,7 +156,7 @@ See `config.yaml.example` for detailed instructions on obtaining tokens for each
 
 ## Setting Up Podman AI Lab (Optional)
 
-For AI-powered report generation:
+For AI-powered activity enrichment and grouping:
 
 1. **Install Podman Desktop**: https://podman-desktop.io
 2. **Install AI Lab Extension**: Open Podman Desktop → Extensions → Install AI Lab
@@ -166,7 +168,12 @@ For AI-powered report generation:
    - Go to "Services" tab
    - Start the model server (default: http://localhost:8000)
 
-The tool will auto-detect the available model. If AI Lab is not running, the tool will fall back to simple markdown generation.
+The tool will auto-detect the available model and use it to:
+- Add descriptions to activities that don't have one
+- Assign projects to activities based on their content
+- Group related activities together (e.g., issue + PR + commits)
+
+If AI Lab is not running, the tool will fall back to simple URL-based grouping without enrichment.
 
 ## Usage
 
@@ -231,35 +238,38 @@ Options:
 
 ## Example Output
 
-With AI enabled, you get an intelligent, achievement-oriented report:
+With AI enabled, you get enriched activities with smart grouping:
 
 ```markdown
-# Activity Report
+# General
 
-During this period, I focused on improving the authentication system
-and fixing several critical bugs in the payment processing module.
+(To be filled manually)
 
-## Authentication System Overhaul
+----
 
-- Implemented OAuth2 integration ([#123](https://github.com/...))
-- Fixed session timeout issues ([#124](https://github.com/...))
-- Added comprehensive tests for auth flows
-- Merged PR [#125](https://github.com/...) after review
+# Project: Quarkus
 
-## Payment Processing Fixes
+* [Fix caching issue in dev mode](https://github.com/quarkusio/quarkus/pull/12345)
+  Fixed a bug where configuration changes weren't being picked up in dev mode.
+  - [Issue: Dev mode not reloading config](https://github.com/quarkusio/quarkus/issues/12340)
+  - [Review comment on PR #12345](https://github.com/quarkusio/quarkus/pull/12345#discussion_r123)
 
-- Resolved critical bug in transaction validation ([PROJ-456](https://jira...))
-- Updated payment gateway integration
-- Deployed hotfix to production
+* [Add support for custom serializers](https://github.com/quarkusio/quarkus/pull/12350)
+  Implemented support for custom JSON serializers in RESTEasy Reactive.
 
-## Code Reviews and Collaboration
+----
 
-- Reviewed 5 pull requests from team members
-- Participated in architecture discussions on Zulip
+# Misc
+
+Reviews, triage, discussions
+
+* [Reviewed: Update documentation for Maven plugin](https://github.com/other-project/repo/pull/456)
+
+* [Discussion: Performance optimization strategies](https://zulipchat.com/...)
 ...
 ```
 
-Without AI (`--no-ai`), you get a simpler chronological listing grouped by source and type.
+Without AI (`--no-ai`), you get simple URL-based grouping without descriptions or AI-assigned projects.
 
 ## Troubleshooting
 
@@ -289,7 +299,7 @@ Run with verbose output to see detailed errors from each provider.
 If the AI model is not available:
 - Check that Podman AI Lab is running
 - Verify the model server is accessible at the configured URL
-- The tool will automatically fall back to simple markdown generation
+- The tool will automatically fall back to simple URL-based grouping without enrichment
 
 ### JIRA or Zulip API errors
 

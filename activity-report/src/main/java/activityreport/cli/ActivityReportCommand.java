@@ -6,9 +6,11 @@ import activityreport.model.ActivityProvider;
 import activityreport.providers.GitHubProvider;
 import activityreport.providers.JiraProvider;
 import activityreport.providers.ZulipProvider;
+import activityreport.report.ActivityGroup;
 import activityreport.report.AIProcessor;
 import activityreport.report.MarkdownReportGenerator;
 import activityreport.report.ProjectClassifier;
+import activityreport.report.SimpleGrouper;
 import io.quarkus.logging.Log;
 import io.quarkus.picocli.runtime.annotations.TopCommand;
 import jakarta.inject.Inject;
@@ -27,7 +29,9 @@ import java.time.LocalDate;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 @TopCommand
 @Command(
@@ -156,25 +160,53 @@ public class ActivityReportCommand implements Runnable {
                 return;
             }
 
-            // Classify activities into projects
+            // Classify activities into projects (for those without projects)
             Log.info("Classifying activities into projects...\n");
             ProjectClassifier classifier = new ProjectClassifier(config);
+            List<Activity> classifiedActivities = new ArrayList<>();
             for (Activity activity : allActivities) {
-                classifier.classifyActivity(activity).ifPresent(project ->
-                    activity.addMetadata("project", project)
-                );
+                var projectOpt = classifier.classifyActivity(activity);
+                if (projectOpt.isPresent()) {
+                    Map<String, Object> newMetadata = new HashMap<>(activity.metadata());
+                    newMetadata.put("project", projectOpt.get());
+                    classifiedActivities.add(new Activity(
+                        activity.source(),
+                        activity.action(),
+                        activity.actionCategory(),
+                        activity.title(),
+                        activity.description(),
+                        activity.url(),
+                        activity.timestamp(),
+                        activity.contentUrls(),
+                        newMetadata
+                    ));
+                } else {
+                    classifiedActivities.add(activity);
+                }
+            }
+
+            // Process with AI or simple grouping
+            List<ActivityGroup> groups;
+            if (noAi) {
+                Log.info("Grouping activities (simple URL-based)...\n");
+                groups = SimpleGrouper.groupActivities(classifiedActivities);
+            } else {
+                AIProcessor aiProcessor = new AIProcessor(config);
+                if (aiProcessor.isAvailable()) {
+                    // Step 1: Enrich activities with descriptions and projects
+                    List<Activity> enrichedActivities = aiProcessor.enrichActivities(classifiedActivities);
+
+                    // Step 2: Group related activities
+                    groups = aiProcessor.groupActivities(enrichedActivities);
+                } else {
+                    Log.info("AI model not available, falling back to simple grouping");
+                    groups = SimpleGrouper.groupActivities(classifiedActivities);
+                }
             }
 
             // Generate report
             Log.info("Generating report...\n");
-
-            String report;
-            if (noAi) {
-                report = MarkdownReportGenerator.generateSimple(allActivities, startDate, endDate);
-            } else {
-                AIProcessor aiProcessor = new AIProcessor(config);
-                report = aiProcessor.generateGroupedReport(allActivities, startDate, endDate);
-            }
+            String report = MarkdownReportGenerator.generate(groups);
 
             // Write report to file
             Path outputPath = writeReportToFile(report, startDate, endDate);
