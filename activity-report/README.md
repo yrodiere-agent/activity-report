@@ -120,6 +120,23 @@ The application can automatically resolve 1Password secret references in your co
 
    The application will automatically resolve all `op://` references using the 1Password CLI. You'll be prompted to authenticate once, then all secrets are loaded in that session.
 
+> [!TIP]
+> **Using multiple 1Password accounts**
+>
+> If you have secrets stored in different 1Password accounts, you can specify which account to use by adding an `?account=` query parameter to the `op://` URL:
+> ```yaml
+> providers:
+>   github:
+>     enabled: true
+>     instances:
+>       - name: "Personal GitHub"
+>         token: "op://Personal/GitHub/token?account=my-personal-account"
+>       - name: "Work GitHub"
+>         token: "op://Work/GitHub/token?account=my-work-account"
+> ```
+>
+> Without the `?account` parameter, 1Password CLI will use your default account or the one most recently signed in.
+
 ### Alternative: Environment Variables (Without 1Password)
 
 If you don't use 1Password, you can use regular environment variables:

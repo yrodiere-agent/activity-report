@@ -52,8 +52,28 @@ public class OnePasswordConfigSourceInterceptor implements ConfigSourceIntercept
         // Show prompt before first 1Password access
         showPromptIfNeeded();
 
+        // Parse account from query parameter if present
+        String account = null;
+        String cleanReference = value;
+
+        int queryStart = value.indexOf('?');
+        if (queryStart != -1) {
+            String query = value.substring(queryStart + 1);
+            cleanReference = value.substring(0, queryStart);
+
+            // Parse query parameters
+            for (String param : query.split("&")) {
+                String[] parts = param.split("=", 2);
+                if (parts.length == 2 && "account".equals(parts[0])) {
+                    account = parts[1];
+                    Log.debugf("Using 1Password account '%s' for property '%s'", account, name);
+                    break;
+                }
+            }
+        }
+
         // Resolve the 1Password reference
-        String resolvedValue = readFromOnePassword(value);
+        String resolvedValue = readFromOnePassword(cleanReference, account);
 
         if (resolvedValue == null) {
             Log.warnf("Failed to resolve 1Password reference for property '%s': %s", name, value);
@@ -79,9 +99,15 @@ public class OnePasswordConfigSourceInterceptor implements ConfigSourceIntercept
         }
     }
 
-    private static String readFromOnePassword(String reference) {
+    private static String readFromOnePassword(String reference, String account) {
         try {
-            ProcessBuilder pb = new ProcessBuilder("op", "read", reference);
+            // Build command with optional account flag
+            ProcessBuilder pb;
+            if (account != null && !account.isEmpty()) {
+                pb = new ProcessBuilder("op", "read", "--account", account, reference);
+            } else {
+                pb = new ProcessBuilder("op", "read", reference);
+            }
             Process process = pb.start();
 
             // Read stdout (the secret value)
