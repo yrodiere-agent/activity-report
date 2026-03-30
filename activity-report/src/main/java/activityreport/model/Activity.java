@@ -18,15 +18,20 @@ public record Activity(
     String url,
     Instant timestamp,
     List<String> contentUrls,        // Additional URLs (comments, reviews, messages, etc.)
+    String project,                  // Assigned project name, or null if unclassified
     Map<String, Object> metadata
 ) implements Comparable<Activity> {
 
     public Activity(String source, String action, ActionCategory actionCategory, String title, String description, String url, Instant timestamp) {
-        this(source, action, actionCategory, title, description, url, timestamp, new ArrayList<>(), new HashMap<>());
+        this(source, action, actionCategory, title, description, url, timestamp, new ArrayList<>(), null, new HashMap<>());
     }
 
     public Activity(String source, String action, ActionCategory actionCategory, String title, String description, String url, Instant timestamp, List<String> contentUrls) {
-        this(source, action, actionCategory, title, description, url, timestamp, contentUrls, new HashMap<>());
+        this(source, action, actionCategory, title, description, url, timestamp, contentUrls, null, new HashMap<>());
+    }
+
+    public Activity(String source, String action, ActionCategory actionCategory, String title, String description, String url, Instant timestamp, List<String> contentUrls, String project) {
+        this(source, action, actionCategory, title, description, url, timestamp, contentUrls, project, new HashMap<>());
     }
 
     public void addMetadata(String key, Object value) {

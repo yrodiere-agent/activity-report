@@ -22,11 +22,13 @@ public class MarkdownReportGenerator {
         for (ActivityGroup group : groups) {
             Activity primary = group.primary();
             ActionCategory actionCategory = primary.actionCategory();
-            String project = (String) primary.metadata().get("project");
+            String project = primary.project();
 
-            // Only CODE activities go to projects, others go to Misc
-            if (actionCategory == ActionCategory.CODE && project != null && !project.isEmpty()) {
-                byProject.computeIfAbsent(project, k -> new ArrayList<>()).add(group);
+            // CODE activities go to project sections (or "Unclassified" if no project)
+            // Non-CODE activities always go to miscGroups
+            if (actionCategory == ActionCategory.CODE) {
+                String projectKey = (project != null && !project.isEmpty()) ? project : "Unclassified";
+                byProject.computeIfAbsent(projectKey, k -> new ArrayList<>()).add(group);
             } else {
                 miscGroups.add(group);
             }

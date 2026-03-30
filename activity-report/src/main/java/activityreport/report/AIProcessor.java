@@ -105,7 +105,7 @@ public class AIProcessor {
                 activityMap.put("description", activity.description());
                 activityMap.put("url", activity.url());
                 activityMap.put("contentUrls", activity.contentUrls());
-                activityMap.put("project", activity.metadata().get("project"));
+                activityMap.put("project", activity.project());
                 activitiesJson.add(activityMap);
             }
 
@@ -163,6 +163,7 @@ public class AIProcessor {
                         original.url(),
                         original.timestamp(),
                         original.contentUrls(),
+                        original.project(),
                         original.metadata()
                     ));
                 }
@@ -174,8 +175,6 @@ public class AIProcessor {
                     int index = proj.get("index").asInt();
                     String project = proj.get("project").asText();
                     Activity original = enriched.get(index);
-                    Map<String, Object> newMetadata = new HashMap<>(original.metadata());
-                    newMetadata.put("project", project);
                     enriched.set(index, new Activity(
                         original.source(),
                         original.action(),
@@ -185,7 +184,8 @@ public class AIProcessor {
                         original.url(),
                         original.timestamp(),
                         original.contentUrls(),
-                        newMetadata
+                        project,
+                        original.metadata()
                     ));
                 }
             }
@@ -227,7 +227,7 @@ public class AIProcessor {
                 activityMap.put("description", truncate(activity.description(), 300));
                 activityMap.put("url", activity.url());
                 activityMap.put("contentUrls", activity.contentUrls());
-                activityMap.put("project", activity.metadata().get("project"));
+                activityMap.put("project", activity.project());
                 activitiesJson.add(activityMap);
             }
 

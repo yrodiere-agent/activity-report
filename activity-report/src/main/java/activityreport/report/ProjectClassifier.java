@@ -33,6 +33,11 @@ public class ProjectClassifier {
     }
 
     public Optional<String> classifyActivity(Activity activity) {
+        // If already classified, return existing project
+        if (activity.project() != null && !activity.project().isEmpty()) {
+            return Optional.of(activity.project());
+        }
+
         // Try to match the activity URL
         String activityUrl = activity.url();
         if (activityUrl != null && !activityUrl.isEmpty()) {
@@ -74,7 +79,7 @@ public class ProjectClassifier {
             }
         }
 
-        // Fall back to default project if configured
+        // Fall back to default project if configured (backward compatibility)
         Object defaultProject = activity.metadata().get("defaultProject");
         if (defaultProject instanceof String) {
             return Optional.of((String) defaultProject);

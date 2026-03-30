@@ -165,21 +165,25 @@ public class ActivityReportCommand implements Runnable {
             ProjectClassifier classifier = new ProjectClassifier(config);
             List<Activity> classifiedActivities = new ArrayList<>();
             for (Activity activity : allActivities) {
-                var projectOpt = classifier.classifyActivity(activity);
-                if (projectOpt.isPresent()) {
-                    Map<String, Object> newMetadata = new HashMap<>(activity.metadata());
-                    newMetadata.put("project", projectOpt.get());
-                    classifiedActivities.add(new Activity(
-                        activity.source(),
-                        activity.action(),
-                        activity.actionCategory(),
-                        activity.title(),
-                        activity.description(),
-                        activity.url(),
-                        activity.timestamp(),
-                        activity.contentUrls(),
-                        newMetadata
-                    ));
+                // Only classify if not already classified
+                if (activity.project() == null) {
+                    var projectOpt = classifier.classifyActivity(activity);
+                    if (projectOpt.isPresent()) {
+                        classifiedActivities.add(new Activity(
+                            activity.source(),
+                            activity.action(),
+                            activity.actionCategory(),
+                            activity.title(),
+                            activity.description(),
+                            activity.url(),
+                            activity.timestamp(),
+                            activity.contentUrls(),
+                            projectOpt.get(),
+                            activity.metadata()
+                        ));
+                    } else {
+                        classifiedActivities.add(activity);
+                    }
                 } else {
                     classifiedActivities.add(activity);
                 }
