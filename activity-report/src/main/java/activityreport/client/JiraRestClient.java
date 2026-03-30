@@ -1,6 +1,7 @@
 package activityreport.client;
 
 import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.node.ObjectNode;
 import jakarta.ws.rs.*;
 import jakarta.ws.rs.core.MediaType;
 import org.eclipse.microprofile.rest.client.annotation.RegisterProvider;
@@ -16,9 +17,7 @@ import org.eclipse.microprofile.rest.client.inject.RegisterRestClient;
 @Consumes(MediaType.APPLICATION_JSON)
 public interface JiraRestClient {
 
-    @GET
-    @Path("/search")
-    JsonNode search(@QueryParam("jql") String jql,
-                    @QueryParam("fields") String fields,
-                    @QueryParam("maxResults") int maxResults);
+    @POST
+    @Path("/search/jql")
+    JsonNode search(ObjectNode request);
 }

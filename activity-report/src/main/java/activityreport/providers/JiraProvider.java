@@ -6,6 +6,8 @@ import activityreport.config.AppConfig;
 import activityreport.model.Activity;
 import activityreport.model.ActivityProvider;
 import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.ObjectNode;
 import io.quarkus.logging.Log;
 import org.eclipse.microprofile.rest.client.RestClientBuilder;
 
@@ -80,8 +82,15 @@ public class JiraProvider implements ActivityProvider {
         long daysAgo = Duration.between(startDate, Instant.now()).toDays();
         var jql = String.format("assignee = currentUser() AND updated >= -%dd ORDER BY updated DESC", daysAgo + 1);
 
+        // Build request body for new POST /search/jql endpoint
+        ObjectMapper mapper = new ObjectMapper();
+        ObjectNode request = mapper.createObjectNode();
+        request.put("jql", jql);
+        request.putArray("fields").add("key").add("summary").add("status").add("created").add("updated").add("issuetype");
+        request.put("maxResults", 100);
+
         // Make API call
-        var root = client.search(jql, "key,summary,status,created,updated,issuetype", 100);
+        var root = client.search(request);
         var issues = root.get("issues");
 
         if (issues != null && issues.isArray()) {
