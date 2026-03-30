@@ -76,16 +76,7 @@ public class MarkdownReportGenerator {
             report.append(String.format("* %s", activity.title()));
         }
 
-        // Add content URLs as sub-items
-        List<String> contentUrls = activity.contentUrls();
-        if (contentUrls != null && !contentUrls.isEmpty()) {
-            report.append("\n");
-            for (String url : contentUrls) {
-                report.append(String.format("  %s\n", url));
-            }
-        }
-
-        // Add description if present (for additional text content)
+        // Add description if present
         if (activity.description() != null && !activity.description().isEmpty()) {
             report.append("\n");
             String[] lines = activity.description().split("\n");
