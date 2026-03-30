@@ -198,7 +198,7 @@ public class GitHubProvider implements ActivityProvider {
                         source,
                         "issue",
                         ActionCategory.DISCUSS,
-                        ref.repoFullName + " #" + ref.number + ": " + issue.getTitle(),
+                        ref.repoFullName + "#" + ref.number + ": " + issue.getTitle(),
                         "", // description
                         issue.getHtmlUrl().toString(),
                         updatedAt,

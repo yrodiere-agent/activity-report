@@ -56,6 +56,7 @@ public class MarkdownReportGenerator {
                 formatActivity(report, activity);
             }
 
+            report.append("\n");
             report.append("----\n\n");
         }
 
