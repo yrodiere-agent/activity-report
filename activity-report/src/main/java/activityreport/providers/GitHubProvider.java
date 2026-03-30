@@ -78,23 +78,29 @@ public class GitHubProvider implements ActivityProvider {
                 PagedIterable<GHEventInfo> events = currentUser.listEvents();
 
                 for (GHEventInfo event : events) {
-                    Date eventDate = event.getCreatedAt();
-                    Instant eventTimestamp = eventDate.toInstant();
+                    try {
+                        Date eventDate = event.getCreatedAt();
+                        Instant eventTimestamp = eventDate.toInstant();
 
-                    // Stop if event is before start date (events are in reverse chronological order)
-                    if (eventTimestamp.isBefore(startDate)) {
-                        break;
-                    }
+                        // Stop if event is before start date (events are in reverse chronological order)
+                        if (eventTimestamp.isBefore(startDate)) {
+                            break;
+                        }
 
-                    // Skip if event is after end date
-                    if (eventTimestamp.isAfter(endDate)) {
-                        continue;
-                    }
+                        // Skip if event is after end date
+                        if (eventTimestamp.isAfter(endDate)) {
+                            continue;
+                        }
 
-                    // Parse different event types
-                    Activity activity = parseGitHubEvent(instanceName, event);
-                    if (activity != null) {
-                        allActivities.add(activity);
+                        // Parse different event types
+                        Activity activity = parseGitHubEvent(instanceName, event);
+                        if (activity != null) {
+                            allActivities.add(activity);
+                        }
+                    } catch (Exception e) {
+                        // Log and skip individual events that fail to parse
+                        Log.tracef("Failed to parse GitHub event (type: %s): %s",
+                            event.getType(), e.getMessage());
                     }
                 }
             } catch (Exception e) {
@@ -112,8 +118,9 @@ public class GitHubProvider implements ActivityProvider {
         return switch (event.getType()) {
             case PUSH -> {
                 var pushPayload = event.getPayload(GHEventPayload.Push.class);
-                if (pushPayload != null && pushPayload.getCommits() != null) {
-                    int commitCount = pushPayload.getCommits().size();
+                if (pushPayload != null && pushPayload.getCommits() != null && !pushPayload.getCommits().isEmpty()) {
+                    var commits = pushPayload.getCommits();
+                    int commitCount = commits.size();
                     String ref = pushPayload.getRef();
                     String branch = ref != null && ref.startsWith("refs/heads/") ?
                         ref.substring("refs/heads/".length()) : ref;
@@ -128,13 +135,16 @@ public class GitHubProvider implements ActivityProvider {
                         // Ignore if repo URL not available
                     }
 
+                    String commitMessages = commits.stream()
+                        .filter(c -> c != null && c.getMessage() != null)
+                        .map(c -> c.getMessage())
+                        .collect(Collectors.joining("; "));
+
                     yield new Activity(
                         source,
                         "push",
                         "Pushed " + commitCount + " commit" + (commitCount > 1 ? "s" : "") + " to " + branch,
-                        pushPayload.getCommits().stream()
-                            .map(c -> c.getMessage())
-                            .collect(Collectors.joining("; ")),
+                        commitMessages,
                         repoUrl,
                         timestamp
                     );
