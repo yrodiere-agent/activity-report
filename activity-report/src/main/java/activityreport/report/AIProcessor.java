@@ -1,7 +1,9 @@
 package activityreport.report;
 
 import activityreport.client.AIRestClient;
+import activityreport.client.TraceClientLogger;
 import activityreport.config.AppConfig;
+import org.jboss.resteasy.reactive.client.api.LoggingScope;
 import activityreport.model.Activity;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
@@ -33,6 +35,8 @@ public class AIProcessor {
             .baseUri(URI.create(aiUrl))
             .connectTimeout(10, java.util.concurrent.TimeUnit.SECONDS)
             .readTimeout(120, java.util.concurrent.TimeUnit.SECONDS)
+            .loggingScope(LoggingScope.REQUEST_RESPONSE)
+            .clientLogger(new TraceClientLogger())
             .build(AIRestClient.class);
 
         this.mapper = new ObjectMapper();

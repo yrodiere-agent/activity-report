@@ -2,6 +2,8 @@ package activityreport.providers;
 
 import activityreport.client.BasicAuthRequestFilter;
 import activityreport.client.JiraRestClient;
+import activityreport.client.TraceClientLogger;
+import org.jboss.resteasy.reactive.client.api.LoggingScope;
 import activityreport.config.AppConfig;
 import activityreport.model.Activity;
 import activityreport.model.ActivityProvider;
@@ -71,12 +73,16 @@ public class JiraProvider implements ActivityProvider {
     private List<Activity> fetchFromInstance(JiraInstance instance, Instant startDate, Instant endDate) throws Exception {
         List<Activity> activities = new ArrayList<>();
 
+        Log.infof("Fetching activities from JIRA instance: %s", instance.name);
+
         // Build REST client for this instance
         var client = QuarkusRestClientBuilder.newBuilder()
             .baseUri(URI.create(instance.url))
             .connectTimeout(30, java.util.concurrent.TimeUnit.SECONDS)
             .readTimeout(60, java.util.concurrent.TimeUnit.SECONDS)
             .register(new BasicAuthRequestFilter(instance.email, instance.token))
+            .loggingScope(LoggingScope.REQUEST_RESPONSE)
+            .clientLogger(new TraceClientLogger())
             .build(JiraRestClient.class);
 
         // Build JQL query
@@ -129,6 +135,8 @@ public class JiraProvider implements ActivityProvider {
                 activities.add(activity);
             }
         }
+
+        Log.infof("Found %d activities from JIRA instance: %s", activities.size(), instance.name);
 
         return activities;
     }

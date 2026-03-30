@@ -80,6 +80,8 @@ public class GitHubProvider implements ActivityProvider {
             String instanceName = instanceInfo.name;
 
             try {
+                Log.infof("Fetching activities from GitHub instance: %s", instanceName);
+
                 GHUser currentUser = github.getMyself();
 
                 // Step 1: Use events API to discover issues/PRs
@@ -110,8 +112,12 @@ public class GitHubProvider implements ActivityProvider {
                 }
 
                 // Step 2: Fetch full details for each unique issue/PR
+                int beforeCount = allActivities.size();
                 allActivities.addAll(fetchIssueDetails(github, instanceInfo, issueRefs, startDate, endDate));
                 allActivities.addAll(fetchPullRequestDetails(github, instanceInfo, prRefs, startDate, endDate));
+                int foundCount = allActivities.size() - beforeCount;
+
+                Log.infof("Found %d activities from GitHub instance: %s", foundCount, instanceName);
 
             } catch (Exception e) {
                 Log.warnf("Error fetching from %s: %s", instanceName, e.getMessage());

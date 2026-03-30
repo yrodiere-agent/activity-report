@@ -1,7 +1,9 @@
 package activityreport.providers;
 
 import activityreport.client.BasicAuthRequestFilter;
+import activityreport.client.TraceClientLogger;
 import activityreport.client.ZulipRestClient;
+import org.jboss.resteasy.reactive.client.api.LoggingScope;
 import activityreport.config.AppConfig;
 import activityreport.model.Activity;
 import activityreport.model.ActivityProvider;
@@ -69,12 +71,16 @@ public class ZulipProvider implements ActivityProvider {
     private List<Activity> fetchFromInstance(ZulipInstance instance, Instant startDate, Instant endDate) throws Exception {
         List<Activity> activities = new ArrayList<>();
 
+        Log.infof("Fetching activities from Zulip instance: %s", instance.url);
+
         // Build REST client for this instance
         var client = QuarkusRestClientBuilder.newBuilder()
             .baseUri(URI.create(instance.url))
             .connectTimeout(30, java.util.concurrent.TimeUnit.SECONDS)
             .readTimeout(60, java.util.concurrent.TimeUnit.SECONDS)
             .register(new BasicAuthRequestFilter(instance.email, instance.apiKey))
+            .loggingScope(LoggingScope.REQUEST_RESPONSE)
+            .clientLogger(new TraceClientLogger())
             .build(ZulipRestClient.class);
 
         // Get current user
@@ -154,6 +160,8 @@ public class ZulipProvider implements ActivityProvider {
                     topic.streamName, topic.subject, e.getMessage());
             }
         }
+
+        Log.infof("Found %d activities from Zulip instance: %s", activities.size(), instance.url);
 
         return activities;
     }
