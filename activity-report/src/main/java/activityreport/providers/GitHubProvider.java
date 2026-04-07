@@ -338,7 +338,7 @@ public class GitHubProvider implements ActivityProvider {
                         source,
                         "pull_request",
                         actionCategory,
-                        ref.repoFullName + " #" + ref.number + ": " + pr.getTitle(),
+                        ref.repoFullName + "#" + ref.number + ": " + pr.getTitle(),
                         "", // description
                         pr.getHtmlUrl().toString(),
                         updatedAt,
