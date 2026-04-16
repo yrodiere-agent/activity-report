@@ -19,39 +19,61 @@ import java.util.stream.Collectors;
  */
 public class GitHubProvider implements ActivityProvider {
     private final List<GitHub> githubClients;
+    private final List<GitHub> publicGithubClients;
     private final List<InstanceInfo> instanceInfos;
 
-    private record InstanceInfo(String name, String publicEventsToken, String defaultProject) {}
+    private record InstanceInfo(String name, String defaultProject) {}
+
+    private static GitHub createGitHubClient(String url, String token) throws IOException {
+        GitHubBuilder builder = new GitHubBuilder();
+
+        // Set endpoint for GitHub Enterprise
+        if (url != null && !url.equals("https://api.github.com")) {
+            builder = builder.withEndpoint(url);
+        }
+
+        // Use token if provided, otherwise fall back to ~/.github property file
+        if (token != null) {
+            builder = builder.withOAuthToken(token);
+        } else {
+            builder = builder.fromPropertyFile();
+        }
+
+        return builder.build();
+    }
 
     public GitHubProvider(AppConfig config) {
         this.githubClients = new ArrayList<>();
+        this.publicGithubClients = new ArrayList<>();
         this.instanceInfos = new ArrayList<>();
 
         config.providers().github().ifPresent(github -> {
             if (github.enabled() && github.instances() != null) {
                 for (var instance : github.instances()) {
                     try {
-                        GitHub client;
-                        GitHubBuilder builder = new GitHubBuilder();
-
-                        // Set endpoint for GitHub Enterprise
-                        if (instance.url().isPresent() && !instance.url().get().equals("https://api.github.com")) {
-                            builder = builder.withEndpoint(instance.url().get());
-                        }
-
-                        // Use token from config if provided, otherwise fall back to ~/.github property file
-                        if (instance.token().isPresent()) {
-                            builder = builder.withOAuthToken(instance.token().get());
-                        } else {
-                            // Read from ~/.github property file
-                            builder = builder.fromPropertyFile();
-                        }
-
-                        client = builder.build();
+                        GitHub client = createGitHubClient(
+                            instance.url().orElse(null),
+                            instance.token().orElse(null)
+                        );
                         githubClients.add(client);
+
+                        // Create public events client if token is configured
+                        GitHub publicClient = null;
+                        if (instance.publicEventsToken().isPresent()) {
+                            try {
+                                publicClient = createGitHubClient(
+                                    instance.url().orElse(null),
+                                    instance.publicEventsToken().get()
+                                );
+                            } catch (IOException e) {
+                                Log.warnf("Failed to initialize public events client for GitHub instance %s: %s",
+                                    instance.name(), e.getMessage());
+                            }
+                        }
+                        publicGithubClients.add(publicClient);
+
                         instanceInfos.add(new InstanceInfo(
                             instance.name(),
-                            instance.publicEventsToken().orElse(null),
                             instance.defaultProject().orElse(null)
                         ));
                     } catch (IOException e) {
@@ -78,6 +100,7 @@ public class GitHubProvider implements ActivityProvider {
 
         for (int i = 0; i < githubClients.size(); i++) {
             GitHub github = githubClients.get(i);
+            GitHub publicGitHub = publicGithubClients.get(i);
             InstanceInfo instanceInfo = instanceInfos.get(i);
             String instanceName = instanceInfo.name;
 
@@ -98,10 +121,9 @@ public class GitHubProvider implements ActivityProvider {
 
                 // Process public events (unfiltered, to work around fine-grained token limitations)
                 // Only if publicEventsToken is configured to avoid rate limiting issues
-                if (instanceInfo.publicEventsToken != null) {
+                if (publicGitHub != null) {
                     try {
                         Log.tracef("Fetching public events for user %s (using publicEventsToken)", currentLogin);
-                        GitHub publicGitHub = new GitHubBuilder().withOAuthToken(instanceInfo.publicEventsToken).build();
                         List<GHEventInfo> publicEventsList = publicGitHub.getUserPublicEvents(currentLogin);
                         processEvents("public", publicEventsList, issueRefs, prRefs, startDate, endDate);
                     } catch (org.kohsuke.github.HttpException e) {
