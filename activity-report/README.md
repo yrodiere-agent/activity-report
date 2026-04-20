@@ -424,15 +424,15 @@ Configure projects in your `config.yaml`:
 ```yaml
 projects:
   - name: "Quarkus"
-    urlPatterns:
+    url-patterns:
       - "https://github.com/quarkusio/*"
       - "https://github.com/quarkiverse/*"
   - name: "Hibernate ORM"
-    urlPatterns:
+    url-patterns:
       - "https://github.com/hibernate/hibernate-orm/*"
       - "https://redhat.atlassian.net/browse/HHH-*"
   - name: "Infrastructure"
-    urlPatterns:
+    url-patterns:
       - "https://github.com/hibernate/hibernate.org/*"
 ```
 
@@ -453,7 +453,7 @@ providers:
     instances:
       - name: "GitHub.com"
         token: "${GITHUB_TOKEN}"
-        defaultProject: "Quarkus"  # Activities from this instance default to Quarkus
+        default-project: "Quarkus"  # Activities from this instance default to Quarkus
 
   zulip:
     enabled: true
@@ -461,7 +461,7 @@ providers:
       - url: "https://quarkus.zulipchat.com"
         email: "you@example.com"
         api_key: "${ZULIP_API_KEY}"
-        defaultProject: "Quarkus"  # All Zulip messages default to Quarkus
+        default-project: "Quarkus"  # All Zulip messages default to Quarkus
 ```
 
 ### Multiple GitHub Instances
