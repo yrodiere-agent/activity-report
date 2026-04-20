@@ -111,13 +111,13 @@ public class GitHubProvider implements ActivityProvider {
                 String currentLogin = currentUser.getLogin();
 
                 // Step 1: Use events API to discover issues/PRs
-                Map<IssueRef, Instant> issueRefs = new HashMap<>();
-                Map<IssueRef, Instant> prRefs = new HashMap<>();
+                Map<IssueRef, IssueRefWithClient> issueRefs = new HashMap<>();
+                Map<IssueRef, IssueRefWithClient> prRefs = new HashMap<>();
 
                 // Process authenticated events (filtered by token scope)
                 Log.tracef("Fetching authenticated events for user %s", currentLogin);
                 PagedIterable<GHEventInfo> authenticatedEvents = currentUser.listEvents();
-                processEvents("authenticated", authenticatedEvents, issueRefs, prRefs, startDate, endDate);
+                processEvents("authenticated", github, authenticatedEvents, issueRefs, prRefs, startDate, endDate);
 
                 // Process public events (unfiltered, to work around fine-grained token limitations)
                 // Only if publicEventsToken is configured to avoid rate limiting issues
@@ -125,7 +125,7 @@ public class GitHubProvider implements ActivityProvider {
                     try {
                         Log.tracef("Fetching public events for user %s (using publicEventsToken)", currentLogin);
                         List<GHEventInfo> publicEventsList = publicGitHub.getUserPublicEvents(currentLogin);
-                        processEvents("public", publicEventsList, issueRefs, prRefs, startDate, endDate);
+                        processEvents("public", publicGitHub, publicEventsList, issueRefs, prRefs, startDate, endDate);
                     } catch (org.kohsuke.github.HttpException e) {
                         // Check for rate limit error (403 or 429 status codes)
                         int responseCode = e.getResponseCode();
@@ -149,8 +149,8 @@ public class GitHubProvider implements ActivityProvider {
 
                 // Step 2: Fetch full details for each unique issue/PR
                 int beforeCount = allActivities.size();
-                allActivities.addAll(fetchIssueDetails(github, instanceInfo, issueRefs, startDate, endDate));
-                allActivities.addAll(fetchPullRequestDetails(github, instanceInfo, currentLogin, prRefs, startDate, endDate));
+                allActivities.addAll(fetchIssueDetails(instanceInfo, issueRefs, startDate, endDate));
+                allActivities.addAll(fetchPullRequestDetails(instanceInfo, currentLogin, prRefs, startDate, endDate));
                 int foundCount = allActivities.size() - beforeCount;
 
                 Log.infof("Found %d activities from GitHub instance: %s", foundCount, instanceName);
@@ -229,8 +229,10 @@ public class GitHubProvider implements ActivityProvider {
 
     private record IssueRef(String repoFullName, int number) {}
 
-    private void processEvents(String eventSource, Iterable<GHEventInfo> events,
-                               Map<IssueRef, Instant> issueRefs, Map<IssueRef, Instant> prRefs,
+    private record IssueRefWithClient(IssueRef ref, Instant timestamp, GitHub client) {}
+
+    private void processEvents(String eventSource, GitHub github, Iterable<GHEventInfo> events,
+                               Map<IssueRef, IssueRefWithClient> issueRefs, Map<IssueRef, IssueRefWithClient> prRefs,
                                Instant startDate, Instant endDate) {
         int eventCount = 0;
         int beforeIssues = issueRefs.size();
@@ -279,7 +281,7 @@ public class GitHubProvider implements ActivityProvider {
                 }
 
                 // Extract issue/PR references from events
-                extractReferences(event, eventTimestamp, issueRefs, prRefs);
+                extractReferences(github, event, eventTimestamp, issueRefs, prRefs);
             } catch (Exception e) {
                 Log.tracef("Failed to process event: %s", e.getMessage());
             }
@@ -292,7 +294,8 @@ public class GitHubProvider implements ActivityProvider {
             eventSource, eventCount, earliestEventInfo, newIssues, newPRs);
     }
 
-    private void extractReferences(GHEventInfo event, Instant eventTimestamp, Map<IssueRef, Instant> issueRefs, Map<IssueRef, Instant> prRefs) throws IOException {
+    private void extractReferences(GitHub github, GHEventInfo event, Instant eventTimestamp,
+                                   Map<IssueRef, IssueRefWithClient> issueRefs, Map<IssueRef, IssueRefWithClient> prRefs) throws IOException {
         // Get repository name from event, not from issue/PR objects
         // This avoids triggering API calls with the wrong token
         GHRepository eventRepo = event.getRepository();
@@ -307,13 +310,14 @@ public class GitHubProvider implements ActivityProvider {
                 if (payload != null && payload.getIssue() != null) {
                     var issue = payload.getIssue();
                     IssueRef ref = new IssueRef(repoFullName, issue.getNumber());
-                    Instant previous = issueRefs.get(ref);
-                    issueRefs.merge(ref, eventTimestamp, (existing, newTime) ->
-                        newTime.isAfter(existing) ? newTime : existing);
-                    if (previous == null) {
+                    IssueRefWithClient existing = issueRefs.get(ref);
+                    IssueRefWithClient newRefWithClient = new IssueRefWithClient(ref, eventTimestamp, github);
+                    issueRefs.merge(ref, newRefWithClient, (existingRef, newRef) ->
+                        newRef.timestamp.isAfter(existingRef.timestamp) ? newRef : existingRef);
+                    if (existing == null) {
                         Log.tracef("  -> Found issue: %s#%d", ref.repoFullName, ref.number);
-                    } else if (eventTimestamp.isAfter(previous)) {
-                        Log.tracef("  -> Updated issue timestamp: %s#%d (was %s, now %s)", ref.repoFullName, ref.number, previous, eventTimestamp);
+                    } else if (eventTimestamp.isAfter(existing.timestamp)) {
+                        Log.tracef("  -> Updated issue timestamp: %s#%d (was %s, now %s)", ref.repoFullName, ref.number, existing.timestamp, eventTimestamp);
                     }
                 }
             }
@@ -323,22 +327,24 @@ public class GitHubProvider implements ActivityProvider {
                     var issue = payload.getIssue();
                     IssueRef ref = new IssueRef(repoFullName, issue.getNumber());
                     if (issue.isPullRequest()) {
-                        Instant previous = prRefs.get(ref);
-                        prRefs.merge(ref, eventTimestamp, (existing, newTime) ->
-                            newTime.isAfter(existing) ? newTime : existing);
-                        if (previous == null) {
+                        IssueRefWithClient existing = prRefs.get(ref);
+                        IssueRefWithClient newRefWithClient = new IssueRefWithClient(ref, eventTimestamp, github);
+                        prRefs.merge(ref, newRefWithClient, (existingRef, newRef) ->
+                            newRef.timestamp.isAfter(existingRef.timestamp) ? newRef : existingRef);
+                        if (existing == null) {
                             Log.tracef("  -> Found PR (from comment): %s#%d", ref.repoFullName, ref.number);
-                        } else if (eventTimestamp.isAfter(previous)) {
-                            Log.tracef("  -> Updated PR timestamp: %s#%d (was %s, now %s)", ref.repoFullName, ref.number, previous, eventTimestamp);
+                        } else if (eventTimestamp.isAfter(existing.timestamp)) {
+                            Log.tracef("  -> Updated PR timestamp: %s#%d (was %s, now %s)", ref.repoFullName, ref.number, existing.timestamp, eventTimestamp);
                         }
                     } else {
-                        Instant previous = issueRefs.get(ref);
-                        issueRefs.merge(ref, eventTimestamp, (existing, newTime) ->
-                            newTime.isAfter(existing) ? newTime : existing);
-                        if (previous == null) {
+                        IssueRefWithClient existing = issueRefs.get(ref);
+                        IssueRefWithClient newRefWithClient = new IssueRefWithClient(ref, eventTimestamp, github);
+                        issueRefs.merge(ref, newRefWithClient, (existingRef, newRef) ->
+                            newRef.timestamp.isAfter(existingRef.timestamp) ? newRef : existingRef);
+                        if (existing == null) {
                             Log.tracef("  -> Found issue (from comment): %s#%d", ref.repoFullName, ref.number);
-                        } else if (eventTimestamp.isAfter(previous)) {
-                            Log.tracef("  -> Updated issue timestamp: %s#%d (was %s, now %s)", ref.repoFullName, ref.number, previous, eventTimestamp);
+                        } else if (eventTimestamp.isAfter(existing.timestamp)) {
+                            Log.tracef("  -> Updated issue timestamp: %s#%d (was %s, now %s)", ref.repoFullName, ref.number, existing.timestamp, eventTimestamp);
                         }
                     }
                 }
@@ -357,26 +363,28 @@ public class GitHubProvider implements ActivityProvider {
                 }
                 if (pr != null) {
                     IssueRef ref = new IssueRef(repoFullName, pr.getNumber());
-                    Instant previous = prRefs.get(ref);
-                    prRefs.merge(ref, eventTimestamp, (existing, newTime) ->
-                        newTime.isAfter(existing) ? newTime : existing);
-                    if (previous == null) {
+                    IssueRefWithClient existing = prRefs.get(ref);
+                    IssueRefWithClient newRefWithClient = new IssueRefWithClient(ref, eventTimestamp, github);
+                    prRefs.merge(ref, newRefWithClient, (existingRef, newRef) ->
+                        newRef.timestamp.isAfter(existingRef.timestamp) ? newRef : existingRef);
+                    if (existing == null) {
                         Log.tracef("  -> Found PR: %s#%d", ref.repoFullName, ref.number);
-                    } else if (eventTimestamp.isAfter(previous)) {
-                        Log.tracef("  -> Updated PR timestamp: %s#%d (was %s, now %s)", ref.repoFullName, ref.number, previous, eventTimestamp);
+                    } else if (eventTimestamp.isAfter(existing.timestamp)) {
+                        Log.tracef("  -> Updated PR timestamp: %s#%d (was %s, now %s)", ref.repoFullName, ref.number, existing.timestamp, eventTimestamp);
                     }
                 }
             }
         }
     }
 
-    private List<Activity> fetchIssueDetails(GitHub github, InstanceInfo instanceInfo, Map<IssueRef, Instant> issueRefs, Instant startDate, Instant endDate) {
+    private List<Activity> fetchIssueDetails(InstanceInfo instanceInfo, Map<IssueRef, IssueRefWithClient> issueRefs, Instant startDate, Instant endDate) {
         List<Activity> activities = new ArrayList<>();
         String source = "GitHub - " + instanceInfo.name;
 
-        for (Map.Entry<IssueRef, Instant> entry : issueRefs.entrySet()) {
-            IssueRef ref = entry.getKey();
-            Instant eventTimestamp = entry.getValue();
+        for (IssueRefWithClient refWithClient : issueRefs.values()) {
+            IssueRef ref = refWithClient.ref;
+            Instant eventTimestamp = refWithClient.timestamp;
+            GitHub github = refWithClient.client;
             try {
                 GHRepository repo = github.getRepository(ref.repoFullName);
                 GHIssue issue = repo.getIssue(ref.number);
@@ -419,13 +427,14 @@ public class GitHubProvider implements ActivityProvider {
         return activities;
     }
 
-    private List<Activity> fetchPullRequestDetails(GitHub github, InstanceInfo instanceInfo, String currentLogin, Map<IssueRef, Instant> prRefs, Instant startDate, Instant endDate) {
+    private List<Activity> fetchPullRequestDetails(InstanceInfo instanceInfo, String currentLogin, Map<IssueRef, IssueRefWithClient> prRefs, Instant startDate, Instant endDate) {
         List<Activity> activities = new ArrayList<>();
         String source = "GitHub - " + instanceInfo.name;
 
-        for (Map.Entry<IssueRef, Instant> entry : prRefs.entrySet()) {
-            IssueRef ref = entry.getKey();
-            Instant eventTimestamp = entry.getValue();
+        for (IssueRefWithClient refWithClient : prRefs.values()) {
+            IssueRef ref = refWithClient.ref;
+            Instant eventTimestamp = refWithClient.timestamp;
+            GitHub github = refWithClient.client;
             try {
                 Log.tracef("Fetching PR details: %s#%d", ref.repoFullName, ref.number);
                 GHRepository repo = github.getRepository(ref.repoFullName);
