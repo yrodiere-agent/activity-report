@@ -41,12 +41,12 @@ public class MarkdownReportGenerator {
         // Generate General section (always empty)
         report.append("# General\n\n");
         report.append("(To be filled manually)\n\n");
-        report.append("----\n\n");
+        report.append("----\n");
 
         // Generate Project sections
         for (Map.Entry<String, List<ActivityGroup>> entry : byProject.entrySet()) {
             String project = entry.getKey();
-            if ("General".equals(project)) {
+            if ("\nGeneral".equals(project)) {
                 continue; // Already handled
             }
 
@@ -55,28 +55,28 @@ public class MarkdownReportGenerator {
                 continue;
             }
 
-            report.append(String.format("# Project: %s\n\n", project));
+            report.append(String.format("\n# Project: %s\n\n", project));
 
             for (ActivityGroup group : projectGroups) {
                 formatGroup(report, group);
             }
 
-            report.append("----\n\n");
+            report.append("\n----\n");
         }
 
         // Generate Misc section (reviews, discussions, chores)
         if (!miscGroups.isEmpty() || !choreGroups.isEmpty()) {
-            report.append("# Misc\n\n");
+            report.append("\n# Misc\n");
 
             if (!miscGroups.isEmpty()) {
-                report.append("Reviews, triage, discussions\n\n");
+                report.append("\nReviews, triage, discussions\n\n");
                 for (ActivityGroup group : miscGroups) {
                     formatGroup(report, group);
                 }
             }
 
             if (!choreGroups.isEmpty()) {
-                report.append("Chores\n\n");
+                report.append("\nChores\n\n");
                 for (ActivityGroup group : choreGroups) {
                     formatGroup(report, group);
                 }
