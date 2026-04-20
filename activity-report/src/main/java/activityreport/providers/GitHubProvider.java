@@ -236,6 +236,8 @@ public class GitHubProvider implements ActivityProvider {
         int beforeIssues = issueRefs.size();
         int beforePRs = prRefs.size();
         Instant earliestEventTimestamp = null;
+        int consecutiveIgnoredEvents = 0;
+        final int MAX_CONSECUTIVE_IGNORED = 5;
 
         for (GHEventInfo event : events) {
             try {
@@ -251,12 +253,25 @@ public class GitHubProvider implements ActivityProvider {
                 Log.tracef("[%s] Event #%d: id=%s, type=%s, timestamp=%s",
                     eventSource, eventCount, event.getId(), event.getType(), eventTimestamp);
 
-                // Stop if event is before start date (events are in reverse chronological order)
+                // Workaround for GitHub API bug: event.created_at doesn't always reflect the actual event timestamp.
+                // For example, a "closed" event for a pull request may return the PR's opened date instead of when it was closed.
+                // This contradicts the documentation at https://docs.github.com/en/rest/using-the-rest-api/github-event-types?apiVersion=2026-03-10#event-object-common-properties
+                // No specific bug report found in GitHub community discussions as of 2026-04-20.
+                // Reported as https://support.github.com/ticket/personal/0/4302866
+                // To handle this, we ignore events before startDate but only stop after 5 consecutive ignored events.
                 if (eventTimestamp.isBefore(startDate)) {
-                    Log.tracef("[%s] Breaking at event #%d (timestamp %s before start date %s)",
-                        eventSource, eventCount, eventTimestamp, startDate);
-                    break;
+                    consecutiveIgnoredEvents++;
+                    Log.tracef("[%s] Ignoring event #%d (timestamp %s before start date %s) - consecutive ignored: %d",
+                        eventSource, eventCount, eventTimestamp, startDate, consecutiveIgnoredEvents);
+                    if (consecutiveIgnoredEvents >= MAX_CONSECUTIVE_IGNORED) {
+                        Log.tracef("[%s] Breaking after %d consecutive ignored events", eventSource, consecutiveIgnoredEvents);
+                        break;
+                    }
+                    continue;
                 }
+
+                // Reset consecutive ignored counter when we find a valid event
+                consecutiveIgnoredEvents = 0;
 
                 // Skip if event is after end date
                 if (eventTimestamp.isAfter(endDate)) {
