@@ -46,6 +46,9 @@ public class ActivityReportCommand implements Runnable {
     @Inject
     AppConfig config;
 
+    @Inject
+    com.fasterxml.jackson.databind.ObjectMapper objectMapper;
+
     @Option(names = {"-d", "--days"}, description = "Number of days to look back (default: 7)")
     private int days = 7;
 
@@ -148,6 +151,15 @@ public class ActivityReportCommand implements Runnable {
 
             Log.infof("\nTotal activities found: %d", allActivities.size());
 
+            // Dump activities to JSON for debugging
+            if (!allActivities.isEmpty()) {
+                try {
+                    dumpActivitiesToJson(allActivities, startDate, endDate);
+                } catch (Exception e) {
+                    Log.warnf("Failed to dump activities to JSON: %s", e.getMessage());
+                }
+            }
+
             if (allActivities.isEmpty()) {
                 StringBuilder emptyReport = new StringBuilder();
                 emptyReport.append("# Activity Report\n\n");
@@ -239,18 +251,46 @@ public class ActivityReportCommand implements Runnable {
     }
 
     /**
+     * Get the base output directory using XDG standards.
+     */
+    private Path getOutputDirectory() {
+        String xdgDataHome = System.getenv("XDG_DATA_HOME");
+        if (xdgDataHome != null && !xdgDataHome.isEmpty()) {
+            return Path.of(xdgDataHome, "activity-report");
+        } else {
+            return Path.of(System.getProperty("user.home"), ".local", "share", "activity-report");
+        }
+    }
+
+    /**
+     * Dump activities to JSON file in dumps/ subdirectory for debugging.
+     */
+    private void dumpActivitiesToJson(List<Activity> activities, Instant startDate, Instant endDate) throws IOException {
+        Path dataDir = getOutputDirectory().resolve("dumps");
+
+        // Create directory if it doesn't exist
+        Files.createDirectories(dataDir);
+
+        // Generate filename based on date range
+        DateTimeFormatter formatter = DateTimeFormatter.ofPattern("yyyy-MM-dd").withZone(ZoneId.systemDefault());
+        String filename = String.format("activities_%s_to_%s.json",
+            formatter.format(startDate),
+            formatter.format(endDate));
+
+        Path outputPath = dataDir.resolve(filename);
+
+        // Serialize activities to JSON using injected ObjectMapper
+        objectMapper.writerWithDefaultPrettyPrinter().writeValue(outputPath.toFile(), activities);
+
+        Log.infof("Activities dumped to: %s", outputPath);
+    }
+
+    /**
      * Write report to file in XDG_DATA_HOME directory.
      * Uses a temporary file and only moves to final location on success.
      */
     private Path writeReportToFile(String report, Instant startDate, Instant endDate) throws IOException {
-        // Determine output directory using XDG standards
-        String xdgDataHome = System.getenv("XDG_DATA_HOME");
-        Path dataDir;
-        if (xdgDataHome != null && !xdgDataHome.isEmpty()) {
-            dataDir = Path.of(xdgDataHome, "activity-report");
-        } else {
-            dataDir = Path.of(System.getProperty("user.home"), ".local", "share", "activity-report");
-        }
+        Path dataDir = getOutputDirectory();
 
         // Create directory if it doesn't exist
         Files.createDirectories(dataDir);
