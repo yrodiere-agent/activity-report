@@ -43,7 +43,8 @@ public class JiraProvider implements ActivityProvider {
                     ));
 
                     // Register this instance for URL extraction
-                    urlExtractor.registerJiraInstance(instance.url(), instance.name());
+                    List<String> projectKeys = instance.projectKeys().orElse(List.of());
+                    urlExtractor.registerJiraInstance(instance.url(), instance.name(), projectKeys);
                 }
             }
         });

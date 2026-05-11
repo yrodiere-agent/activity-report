@@ -16,10 +16,6 @@ public class UrlExtractor {
     private record UrlPattern(Pattern pattern, String description) {}
     private record IssueKeyPattern(Pattern keyPattern, String baseUrl, String description) {}
 
-    private static final Pattern JIRA_KEY_PATTERN = Pattern.compile(
-        "\\b([A-Z][A-Z0-9]+-\\d+)\\b"
-    );
-
     /**
      * Register a GitHub instance for PR URL extraction.
      * Supports both GitHub.com and GitHub Enterprise.
@@ -45,9 +41,14 @@ public class UrlExtractor {
     }
 
     /**
-     * Register a JIRA instance for issue URL extraction and issue key resolution.
+     * Register a JIRA instance for issue URL extraction and optional issue key resolution.
+     *
+     * @param baseUrl Base URL of the JIRA instance
+     * @param name Name of the instance
+     * @param projectKeys Optional list of project keys (e.g., ["HSEARCH", "HHH"]) to resolve.
+     *                    If empty, no issue key resolution will be performed (only full URLs extracted).
      */
-    public void registerJiraInstance(String baseUrl, String name) {
+    public void registerJiraInstance(String baseUrl, String name, List<String> projectKeys) {
         // Register URL pattern for full JIRA issue URLs
         String escapedHost = Pattern.quote(extractHost(baseUrl));
         Pattern urlPattern = Pattern.compile(
@@ -55,8 +56,17 @@ public class UrlExtractor {
         );
         urlPatterns.add(new UrlPattern(urlPattern, "JIRA Issue URL - " + name));
 
-        // Register issue key pattern for resolving references like "PROJ-123"
-        issueKeyPatterns.add(new IssueKeyPattern(JIRA_KEY_PATTERN, baseUrl, "JIRA Issue Key - " + name));
+        // Register issue key patterns only for configured project keys
+        if (projectKeys != null && !projectKeys.isEmpty()) {
+            for (String projectKey : projectKeys) {
+                // Build pattern for this specific project key (e.g., "HSEARCH-123")
+                Pattern keyPattern = Pattern.compile(
+                    "\\b(" + Pattern.quote(projectKey) + "-\\d+)\\b"
+                );
+                issueKeyPatterns.add(new IssueKeyPattern(keyPattern, baseUrl,
+                    "JIRA Issue Key - " + name + " (" + projectKey + ")"));
+            }
+        }
     }
 
     /**

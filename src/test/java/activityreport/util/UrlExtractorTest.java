@@ -3,6 +3,7 @@ package activityreport.util;
 import org.junit.jupiter.api.Test;
 
 import java.util.HashSet;
+import java.util.List;
 import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -78,8 +79,8 @@ class UrlExtractorTest {
     @Test
     void testExtractJiraIssueUrls() {
         UrlExtractor extractor = new UrlExtractor();
-        extractor.registerJiraInstance("https://jira.example.com", "Example JIRA");
-        extractor.registerJiraInstance("https://issues.corp.com", "Corp Issues");
+        extractor.registerJiraInstance("https://jira.example.com", "Example JIRA", List.of());
+        extractor.registerJiraInstance("https://issues.corp.com", "Corp Issues", List.of());
 
         String text = "Fixed https://jira.example.com/browse/PROJ-123 and https://issues.corp.com/browse/BUG-456";
         Set<String> urls = new HashSet<>();
@@ -91,9 +92,9 @@ class UrlExtractorTest {
     }
 
     @Test
-    void testExtractJiraIssueKeys() {
+    void testExtractJiraIssueKeysWithConfiguredProjects() {
         UrlExtractor extractor = new UrlExtractor();
-        extractor.registerJiraInstance("https://jira.example.com", "Example JIRA");
+        extractor.registerJiraInstance("https://jira.example.com", "Example JIRA", List.of("PROJ", "TASK"));
 
         String text = "Working on PROJ-123 and PROJ-456 today";
         Set<String> urls = new HashSet<>();
@@ -105,16 +106,18 @@ class UrlExtractorTest {
     }
 
     @Test
-    void testExtractJiraIssueKeysIgnoresLowercase() {
+    void testExtractJiraIssueKeysIgnoresUnconfiguredProjects() {
         UrlExtractor extractor = new UrlExtractor();
-        extractor.registerJiraInstance("https://jira.example.com", "Example JIRA");
+        // Only configured to recognize PROJ keys, not LICENSE keys
+        extractor.registerJiraInstance("https://jira.example.com", "Example JIRA", List.of("PROJ"));
 
-        String text = "The proj-123 is not a valid issue key but PROJ-123 is";
+        String text = "Working on PROJ-123 but LICENSE-2 should be ignored";
         Set<String> urls = new HashSet<>();
         extractor.extractExternalUrls(text, urls);
 
         assertEquals(1, urls.size());
         assertTrue(urls.contains("https://jira.example.com/browse/PROJ-123"));
+        assertFalse(urls.contains("https://jira.example.com/browse/LICENSE-2"));
     }
 
     @Test
@@ -122,7 +125,7 @@ class UrlExtractorTest {
         UrlExtractor extractor = new UrlExtractor();
         extractor.registerGitHubInstance("https://api.github.com", "GitHub.com");
         extractor.registerGitLabInstance("https://gitlab.com", "GitLab.com");
-        extractor.registerJiraInstance("https://jira.example.com", "Example JIRA");
+        extractor.registerJiraInstance("https://jira.example.com", "Example JIRA", List.of("PROJ", "BUG"));
 
         String text = "Fixed PROJ-123 via https://github.com/owner/repo/pull/456 " +
                      "and https://gitlab.com/other/repo/-/merge_requests/789. " +

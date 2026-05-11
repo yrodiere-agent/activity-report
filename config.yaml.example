@@ -31,10 +31,11 @@ providers:
       #   email: "your-email@example.com"
       #   token: "op://Private/JIRA/token"
       #   default-project: "Infrastructure"
+      #   project-keys:  # Optional: project keys to resolve (e.g., "PROJ-123")
+      #     - "PROJ"
+      #     - "TASK"
 
   # Zulip (supports multiple instances)
-  # Note: Zulip will automatically extract JIRA issue keys (e.g., PROJ-123) and resolve them
-  # against configured JIRA instances for cross-provider grouping
   zulip:
     enabled: false  # Set to true to enable
     instances:

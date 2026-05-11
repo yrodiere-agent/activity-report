@@ -4,6 +4,7 @@ import activityreport.util.UrlExtractor;
 import org.junit.jupiter.api.Test;
 
 import java.util.HashSet;
+import java.util.List;
 import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -16,7 +17,7 @@ class GitHubUrlExtractionTest {
     @Test
     void testExtractJiraIssueFromPRDescription() {
         UrlExtractor extractor = new UrlExtractor();
-        extractor.registerJiraInstance("https://jira.example.com", "Example JIRA");
+        extractor.registerJiraInstance("https://jira.example.com", "Example JIRA", List.of("PROJ"));
 
         String prBody = "This PR fixes PROJ-123 by implementing the new validation logic.";
         Set<String> urls = new HashSet<>();
@@ -28,7 +29,7 @@ class GitHubUrlExtractionTest {
     @Test
     void testExtractJiraUrlFromPRDescription() {
         UrlExtractor extractor = new UrlExtractor();
-        extractor.registerJiraInstance("https://jira.example.com", "Example JIRA");
+        extractor.registerJiraInstance("https://jira.example.com", "Example JIRA", List.of());
 
         String prBody = "Implements https://jira.example.com/browse/FEAT-456";
         Set<String> urls = new HashSet<>();
@@ -65,7 +66,7 @@ class GitHubUrlExtractionTest {
     void testExtractMultipleReferencesFromPRBody() {
         UrlExtractor extractor = new UrlExtractor();
         extractor.registerGitHubInstance("https://api.github.com", "GitHub.com");
-        extractor.registerJiraInstance("https://jira.example.com", "Example JIRA");
+        extractor.registerJiraInstance("https://jira.example.com", "Example JIRA", List.of("PROJ", "BUG"));
 
         String prBody = """
             Fixes PROJ-123 and PROJ-456
@@ -85,7 +86,7 @@ class GitHubUrlExtractionTest {
     @Test
     void testCommonPRTemplatePatterns() {
         UrlExtractor extractor = new UrlExtractor();
-        extractor.registerJiraInstance("https://jira.example.com", "Example JIRA");
+        extractor.registerJiraInstance("https://jira.example.com", "Example JIRA", List.of("PROJ"));
 
         String prBody = """
             ## Description
