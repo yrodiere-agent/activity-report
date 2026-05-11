@@ -411,6 +411,31 @@ public class GitHubProvider implements ActivityProvider {
     }
 
     /**
+     * Extract issue/PR references using #1234 syntax from title and body.
+     * Resolves to full URLs in the context of the given repository.
+     */
+    private void extractHashReferences(String repoFullName, String title, String body, List<String> contentUrls) {
+        java.util.regex.Pattern pattern = java.util.regex.Pattern.compile("#(\\d+)\\b");
+
+        if (title != null) {
+            java.util.regex.Matcher matcher = pattern.matcher(title);
+            while (matcher.find()) {
+                int issueNumber = Integer.parseInt(matcher.group(1));
+                // GitHub redirects /issues/{number} to PRs if needed
+                contentUrls.add("https://github.com/" + repoFullName + "/issues/" + issueNumber);
+            }
+        }
+
+        if (body != null) {
+            java.util.regex.Matcher matcher = pattern.matcher(body);
+            while (matcher.find()) {
+                int issueNumber = Integer.parseInt(matcher.group(1));
+                contentUrls.add("https://github.com/" + repoFullName + "/issues/" + issueNumber);
+            }
+        }
+    }
+
+    /**
      * Fetch details for issues or pull requests.
      * Unified method to avoid code duplication between issues and PRs.
      */
@@ -483,6 +508,9 @@ public class GitHubProvider implements ActivityProvider {
                 if (body != null) {
                     urlExtractor.extractExternalUrls(body, externalUrls);
                 }
+
+                // Extract #1234 references from title and body (GitHub-instance specific)
+                extractHashReferences(ref.repoFullName, title, body, contentUrls);
 
                 // Add comment links and extract external URLs from comments
                 extractFromComments(issue.getComments(), contentUrls, externalUrls, startDate, endDate, urlExtractor);
