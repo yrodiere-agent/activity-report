@@ -25,8 +25,6 @@ When creating tests in this Quarkus project, choose the appropriate annotation:
 mvn test -Dtest=ClassName
 ```
 
-Note: You may see a harmless LogManager warning - this is expected.
-
 ## Config Documentation
 
 When working with configuration files in this project:
