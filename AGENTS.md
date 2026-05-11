@@ -1,8 +1,10 @@
-# Config Documentation Skill
+# Agents
+
+## Config Documentation
 
 When working with configuration files in this project:
 
-## Rules
+### Rules
 
 1. **Keep config.yaml.example concise**
    - Use brief inline comments only
@@ -23,7 +25,7 @@ When working with configuration files in this project:
    - "Credential Management" section for tokens and secrets
    - "Advanced Configuration" section for complex setups
 
-## Rationale
+### Rationale
 
 - config.yaml.example should be a quick reference template
 - Detailed docs in README.md are easier to search, link to, and maintain
