@@ -27,9 +27,12 @@ import java.nio.file.StandardCopyOption;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDate;
+import java.time.LocalTime;
 import java.time.ZoneId;
+import java.time.ZonedDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
+import java.util.Calendar;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -43,6 +46,7 @@ import java.util.Map;
 )
 public class ActivityReportCommand implements Runnable {
 
+    public static final LocalTime END_OF_DAY_TIME = LocalTime.of(23, 59, 59);
     @Inject
     AppConfig config;
 
@@ -90,10 +94,11 @@ public class ActivityReportCommand implements Runnable {
             Instant startDate, endDate;
             if (startDateStr != null && endDateStr != null) {
                 startDate = LocalDate.parse(startDateStr).atStartOfDay(ZoneId.systemDefault()).toInstant();
-                endDate = LocalDate.parse(endDateStr).atTime(23, 59, 59).atZone(ZoneId.systemDefault()).toInstant();
+                endDate = LocalDate.parse(endDateStr).atTime(LocalTime.MAX).atZone(ZoneId.systemDefault()).toInstant();
             } else {
-                endDate = Instant.now();
-                startDate = endDate.minus(Duration.ofDays(days));
+                ZonedDateTime endDateZoned = Instant.now().atZone(ZoneId.systemDefault()).with(LocalTime.MAX);
+                endDate = endDateZoned.toInstant();
+                startDate = endDateZoned.minus(Duration.ofDays(days)).with(LocalTime.MIN).toInstant();
             }
 
             DateTimeFormatter formatter = DateTimeFormatter.ISO_LOCAL_DATE.withZone(ZoneId.systemDefault());
