@@ -1,6 +1,7 @@
 package activityreport.config.validation;
 
 import activityreport.config.AppConfig;
+import activityreport.config.CliFlags;
 import jakarta.validation.ConstraintValidator;
 import jakarta.validation.ConstraintValidatorContext;
 
@@ -14,6 +15,10 @@ public class ValidProviderConfigValidator implements ConstraintValidator<ValidPr
 
     @Override
     public boolean isValid(AppConfig.ProviderConfig provider, ConstraintValidatorContext context) {
+        if (CliFlags.isHelpOrVersionRequested()) {
+            return true;
+        }
+
         if (provider == null) {
             return true; // Let @NotNull handle null values
         }

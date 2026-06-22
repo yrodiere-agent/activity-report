@@ -43,6 +43,11 @@ public class OnePasswordConfigSourceInterceptor implements ConfigSourceIntercept
             return configValue;
         }
 
+        // Skip resolution when only displaying help/version
+        if (CliFlags.isHelpOrVersionRequested()) {
+            return configValue;
+        }
+
         // Check if op CLI is available (cached after first check)
         if (!isOpCliAvailable()) {
             Log.warnf("1Password CLI not available, cannot resolve: %s", value);
