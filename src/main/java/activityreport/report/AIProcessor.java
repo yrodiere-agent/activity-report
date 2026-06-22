@@ -106,6 +106,9 @@ public class AIProcessor {
                 activityMap.put("url", activity.url());
                 activityMap.put("contentUrls", activity.contentUrls());
                 activityMap.put("project", activity.project());
+                if (activity.metadata() != null && !activity.metadata().isEmpty()) {
+                    activityMap.put("metadata", activity.metadata());
+                }
                 activitiesJson.add(activityMap);
             }
 
@@ -228,8 +231,8 @@ public class AIProcessor {
                 activityMap.put("url", activity.url());
                 activityMap.put("contentUrls", activity.contentUrls());
                 activityMap.put("project", activity.project());
-                if (Boolean.TRUE.equals(activity.metadata().get("targetsDefaultBranch"))) {
-                    activityMap.put("targetsDefaultBranch", true);
+                if (activity.metadata() != null && !activity.metadata().isEmpty()) {
+                    activityMap.put("metadata", activity.metadata());
                 }
                 activitiesJson.add(activityMap);
             }
