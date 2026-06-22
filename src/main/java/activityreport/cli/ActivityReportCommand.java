@@ -42,7 +42,20 @@ import java.util.Map;
     name = "report",
     mixinStandardHelpOptions = true,
     versionProvider = ActivityReportCommand.ManifestVersionProvider.class,
-    description = "Generate activity reports from GitHub, JIRA, Zulip, and other sources"
+    description = "Generate activity reports from GitHub, JIRA, Zulip, and other sources",
+    footer = {
+        "",
+        "Wrapper script options:",
+        "  --config <path>     Path to config file (or set REPORT_CONFIG_PATH)",
+        "  --trace             Enable trace logging",
+        "  -J <arg>            Pass a JVM argument (e.g. -J -Xmx512m)",
+        "",
+        "Environment variables:",
+        "  REPORT_CONFIG_PATH  Path to config file (overrides XDG location)",
+        "  REPORT_DATA_PATH    Report output directory (overrides XDG location)",
+        "  XDG_CONFIG_HOME     Config file base directory (default: ~/.config)",
+        "  XDG_DATA_HOME       Report output base directory (default: ~/.local/share)"
+    }
 )
 public class ActivityReportCommand implements Runnable {
 
@@ -64,6 +77,9 @@ public class ActivityReportCommand implements Runnable {
 
     @Option(names = {"--no-ai"}, description = "Disable AI processing and use simple markdown generation")
     private boolean noAi = false;
+
+    @Option(names = {"--data"}, description = "Report output directory (or set REPORT_DATA_PATH)")
+    private Path dataDir;
 
     /**
      * Validate the configuration file exists.
@@ -260,10 +276,21 @@ public class ActivityReportCommand implements Runnable {
      * Get the base output directory using XDG standards or REPORT_DATA_PATH override.
      */
     private Path getOutputDirectory() {
-        // Check for explicit data path override first
+        // CLI option takes precedence
+        if (dataDir != null) {
+            return dataDir;
+        }
+
+        // Then check env var
         String reportDataPath = System.getenv("REPORT_DATA_PATH");
         if (reportDataPath != null && !reportDataPath.isEmpty()) {
             return Path.of(reportDataPath);
+        }
+
+        // When using a custom config, default to PWD instead of XDG
+        String reportConfigPath = System.getenv("REPORT_CONFIG_PATH");
+        if (reportConfigPath != null && !reportConfigPath.isEmpty()) {
+            return Path.of(System.getProperty("user.dir"));
         }
 
         // Fall back to XDG standards

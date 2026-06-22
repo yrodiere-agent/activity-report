@@ -18,7 +18,6 @@ fi
 
 JVM_ARGS=""
 APP_ARGS=()
-CONFIG_SET=false
 
 while [[ $# -gt 0 ]]; do
     case $1 in
@@ -34,12 +33,6 @@ while [[ $# -gt 0 ]]; do
         --config)
             shift
             export REPORT_CONFIG_PATH="$1"
-            CONFIG_SET=true
-            shift
-            ;;
-        --data)
-            shift
-            export REPORT_DATA_PATH="$1"
             shift
             ;;
         *)
@@ -48,11 +41,6 @@ while [[ $# -gt 0 ]]; do
             ;;
     esac
 done
-
-# If --config was used but --data wasn't, default to PWD
-if [ "$CONFIG_SET" = true ] && [ -z "$REPORT_DATA_PATH" ]; then
-    export REPORT_DATA_PATH="$PWD"
-fi
 
 # Run the Quarkus application
 exec java $JVM_ARGS -jar "$QUARKUS_APP/quarkus-run.jar" "${APP_ARGS[@]}"
