@@ -64,10 +64,14 @@ public class SimpleGrouper {
                 continue;
             }
 
-            // Pick primary: prefer CODE > REVIEW > DISCUSS > CHORE
+            // Pick primary: prefer CODE (default branch first) > REVIEW > DISCUSS > CHORE
             Activity primary = groupSet.stream()
                 .filter(a -> a.actionCategory() == ActionCategory.CODE)
+                .filter(a -> Boolean.TRUE.equals(a.metadata().get("targetsDefaultBranch")))
                 .findFirst()
+                .or(() -> groupSet.stream()
+                    .filter(a -> a.actionCategory() == ActionCategory.CODE)
+                    .findFirst())
                 .or(() -> groupSet.stream()
                     .filter(a -> a.actionCategory() == ActionCategory.REVIEW)
                     .findFirst())

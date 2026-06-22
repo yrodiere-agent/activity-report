@@ -5,7 +5,9 @@ import activityreport.model.Activity;
 import org.junit.jupiter.api.Test;
 
 import java.time.Instant;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -120,6 +122,72 @@ class SimpleGrouperTest {
             .filteredOn(g -> !g.secondary().isEmpty())
             .as("No grouping when URLs are related but don't exactly match")
             .isEmpty();
+    }
+
+    @Test
+    void testPrimaryPrefersCodeTargetingDefaultBranch() {
+        Activity prFeatureBranch = new Activity(
+            "GitHub",
+            "pull_request",
+            ActionCategory.CODE,
+            "Backport fix to 1.x",
+            "Description",
+            "https://github.com/repo/pull/100",
+            Instant.now(),
+            List.of("https://github.com/repo/pull/200"),
+            null,
+            new HashMap<>(Map.of())
+        );
+
+        Activity prDefaultBranch = new Activity(
+            "GitHub",
+            "pull_request",
+            ActionCategory.CODE,
+            "Add feature X",
+            "Description",
+            "https://github.com/repo/pull/200",
+            Instant.now(),
+            List.of("https://github.com/repo/pull/100"),
+            null,
+            new HashMap<>(Map.of("targetsDefaultBranch", true))
+        );
+
+        // Even though prFeatureBranch comes first, the one targeting default branch should be primary
+        List<ActivityGroup> groups = SimpleGrouper.groupActivities(List.of(prFeatureBranch, prDefaultBranch));
+
+        assertThat(groups).hasSize(1);
+        assertThat(groups.get(0).primary()).isSameAs(prDefaultBranch);
+        assertThat(groups.get(0).secondary()).containsExactly(prFeatureBranch);
+    }
+
+    @Test
+    void testPrimaryFallsBackToAnyCodeWhenNoneTargetDefaultBranch() {
+        Activity pr1 = new Activity(
+            "GitHub",
+            "pull_request",
+            ActionCategory.CODE,
+            "Backport fix to 1.x",
+            "Description",
+            "https://github.com/repo/pull/100",
+            Instant.now(),
+            List.of("https://github.com/repo/pull/200")
+        );
+
+        Activity review = new Activity(
+            "GitHub",
+            "review",
+            ActionCategory.REVIEW,
+            "Reviewed PR",
+            "Description",
+            "https://github.com/repo/pull/200",
+            Instant.now(),
+            List.of("https://github.com/repo/pull/100")
+        );
+
+        List<ActivityGroup> groups = SimpleGrouper.groupActivities(List.of(review, pr1));
+
+        assertThat(groups).hasSize(1);
+        assertThat(groups.get(0).primary()).isSameAs(pr1);
     }
 
     @Test

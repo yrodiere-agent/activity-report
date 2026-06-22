@@ -228,6 +228,9 @@ public class AIProcessor {
                 activityMap.put("url", activity.url());
                 activityMap.put("contentUrls", activity.contentUrls());
                 activityMap.put("project", activity.project());
+                if (Boolean.TRUE.equals(activity.metadata().get("targetsDefaultBranch"))) {
+                    activityMap.put("targetsDefaultBranch", true);
+                }
                 activitiesJson.add(activityMap);
             }
 
@@ -241,7 +244,7 @@ public class AIProcessor {
 
                 Guidelines:
                 - Activities sharing a URL should ALWAYS be grouped together
-                - Within each group, choose ONE primary activity (preferably CODE category)
+                - Within each group, choose ONE primary activity (preferably CODE category, and among CODE activities prefer those with targetsDefaultBranch=true)
                 - All others in the group are secondary
                 - Activities can only be in one group
                 - Some activities may remain ungrouped
