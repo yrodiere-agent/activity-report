@@ -9,9 +9,9 @@ import java.util.stream.Collectors;
 /**
  * Simple URL-based activity grouper (fallback when AI is not available).
  * <p>
- * Substantive activities (CODE, REVIEW) each anchor their own group.
- * Minor activities (DISCUSS, CHORE) are absorbed into the best-connected
- * substantive group, or grouped among themselves if unconnected.
+ * Activities sharing URLs are grouped together via transitive closure,
+ * with one constraint: a group may not contain both CODE and REVIEW
+ * activities, since those represent different kinds of work.
  */
 public class SimpleGrouper {
 
@@ -27,8 +27,15 @@ public class SimpleGrouper {
     private static final Comparator<Activity> ACTIVITY_PRIORITY =
         Comparator.comparingInt(SimpleGrouper::activityPriorityRank);
 
-    private static boolean isMinor(Activity a) {
-        return a.actionCategory() == ActionCategory.DISCUSS || a.actionCategory() == ActionCategory.CHORE;
+    private static boolean wouldMixCodeAndReview(Set<Activity> group) {
+        boolean hasCode = false;
+        boolean hasReview = false;
+        for (Activity a : group) {
+            if (a.actionCategory() == ActionCategory.CODE) hasCode = true;
+            else if (a.actionCategory() == ActionCategory.REVIEW) hasReview = true;
+            if (hasCode && hasReview) return true;
+        }
+        return false;
     }
 
     public static List<ActivityGroup> groupActivities(List<Activity> activities) {
@@ -37,103 +44,88 @@ public class SimpleGrouper {
 
         for (Activity activity : activities) {
             Set<String> urls = new HashSet<>();
+
+            // Add primary URL
             if (activity.url() != null && !activity.url().isEmpty()) {
                 urls.add(activity.url());
             }
+
+            // Add content URLs
             if (activity.contentUrls() != null) {
                 urls.addAll(activity.contentUrls());
             }
+
+            // Add to map for each URL
             for (String url : urls) {
                 urlToActivities.computeIfAbsent(url, k -> new HashSet<>()).add(activity);
             }
         }
 
-        // Build direct connections between activities via shared URLs
-        Map<Activity, Set<Activity>> connections = new HashMap<>();
-        for (Set<Activity> related : urlToActivities.values()) {
-            if (related.size() < 2) {
+        // Merge groups that share activities (transitive closure),
+        // but never merge two groups if the result would contain
+        // both CODE and REVIEW activities.
+        Map<Activity, Set<Activity>> activityToGroup = new HashMap<>();
+
+        for (Set<Activity> relatedActivities : urlToActivities.values()) {
+            if (relatedActivities.size() < 2) {
                 continue;
             }
-            for (Activity a : related) {
-                for (Activity b : related) {
-                    if (a != b) {
-                        connections.computeIfAbsent(a, k -> new HashSet<>()).add(b);
-                    }
-                }
-            }
-        }
 
-        // Each substantive activity anchors its own group
-        Map<Activity, List<Activity>> groups = new LinkedHashMap<>();
-        Set<Activity> assigned = new HashSet<>();
-        for (Activity a : activities) {
-            if (!isMinor(a)) {
-                groups.put(a, new ArrayList<>());
-                assigned.add(a);
-            }
-        }
+            List<Activity> related = new ArrayList<>(relatedActivities);
+            for (int i = 0; i < related.size(); i++) {
+                for (int j = i + 1; j < related.size(); j++) {
+                    Activity a = related.get(i);
+                    Activity b = related.get(j);
 
-        // Assign minor activities to the best-connected substantive activity
-        for (Activity m : activities) {
-            if (!isMinor(m)) {
-                continue;
-            }
-            Set<Activity> connected = connections.getOrDefault(m, Set.of());
-            Optional<Activity> bestSubstantive = connected.stream()
-                .filter(c -> !isMinor(c))
-                .min(ACTIVITY_PRIORITY);
+                    Set<Activity> groupA = activityToGroup.get(a);
+                    Set<Activity> groupB = activityToGroup.get(b);
 
-            if (bestSubstantive.isPresent()) {
-                groups.get(bestSubstantive.get()).add(m);
-                assigned.add(m);
-            }
-        }
-
-        // Group remaining minor activities among themselves using transitive URL overlap
-        List<Activity> unassignedMinor = activities.stream()
-            .filter(a -> !assigned.contains(a))
-            .toList();
-
-        if (!unassignedMinor.isEmpty()) {
-            Map<Activity, Set<Activity>> minorActivityToGroup = new HashMap<>();
-            for (Activity m : unassignedMinor) {
-                Set<Activity> connected = connections.getOrDefault(m, Set.of());
-                for (Activity other : connected) {
-                    if (assigned.contains(other) || !isMinor(other)) {
+                    if (groupA != null && groupA == groupB) {
                         continue;
                     }
-                    Set<Activity> groupA = minorActivityToGroup.computeIfAbsent(m, k -> new HashSet<>(Set.of(k)));
-                    Set<Activity> groupB = minorActivityToGroup.computeIfAbsent(other, k -> new HashSet<>(Set.of(k)));
-                    if (groupA != groupB) {
-                        Set<Activity> merged = new HashSet<>(groupA);
-                        merged.addAll(groupB);
-                        for (Activity act : merged) {
-                            minorActivityToGroup.put(act, merged);
-                        }
+
+                    // Build candidate merged group and check constraint
+                    Set<Activity> candidate = new HashSet<>();
+                    candidate.add(a);
+                    candidate.add(b);
+                    if (groupA != null) candidate.addAll(groupA);
+                    if (groupB != null) candidate.addAll(groupB);
+
+                    if (wouldMixCodeAndReview(candidate)) {
+                        continue;
+                    }
+
+                    for (Activity activity : candidate) {
+                        activityToGroup.put(activity, candidate);
                     }
                 }
             }
+        }
 
-            Set<Set<Activity>> uniqueMinorGroups = new HashSet<>(minorActivityToGroup.values());
-            for (Set<Activity> groupSet : uniqueMinorGroups) {
-                List<Activity> sorted = groupSet.stream()
-                    .sorted(ACTIVITY_PRIORITY)
-                    .collect(Collectors.toCollection(ArrayList::new));
-                groups.put(sorted.removeFirst(), sorted);
-                assigned.addAll(groupSet);
+        // Create unique groups
+        Set<Set<Activity>> uniqueGroups = new HashSet<>(activityToGroup.values());
+        List<ActivityGroup> groups = new ArrayList<>();
+
+        for (Set<Activity> groupSet : uniqueGroups) {
+            if (groupSet.isEmpty()) {
+                continue;
             }
 
-            for (Activity m : unassignedMinor) {
-                if (!assigned.contains(m)) {
-                    groups.put(m, List.of());
-                }
+            List<Activity> sorted = groupSet.stream()
+                .sorted(ACTIVITY_PRIORITY)
+                .collect(Collectors.toCollection(ArrayList::new));
+
+            groups.add(new ActivityGroup(sorted.removeFirst(), sorted));
+        }
+
+        // Add ungrouped activities as single-item groups
+        Set<Activity> allGrouped = activityToGroup.keySet();
+        for (Activity activity : activities) {
+            if (!allGrouped.contains(activity)) {
+                groups.add(new ActivityGroup(activity, List.of()));
             }
         }
 
-        List<ActivityGroup> result = new ArrayList<>();
-        for (var entry : groups.entrySet()) {
-            result.add(new ActivityGroup(entry.getKey(), entry.getValue()));
-        }
-        return result;
+        return groups;
     }
 }

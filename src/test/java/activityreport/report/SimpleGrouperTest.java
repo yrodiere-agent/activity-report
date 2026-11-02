@@ -46,7 +46,7 @@ class SimpleGrouperTest {
     }
 
     @Test
-    void testTwoCodeActivitiesStaySeparate() {
+    void testTwoCodeActivitiesGroupTogether() {
         Activity pr = new Activity(
             "GitHub",
             "pull_request",
@@ -77,9 +77,9 @@ class SimpleGrouperTest {
         List<ActivityGroup> groups = SimpleGrouper.groupActivities(List.of(pr, jiraIssue));
 
         assertThat(groups)
-            .as("Two CODE activities should stay separate even with shared URLs")
-            .hasSize(2)
-            .allMatch(g -> g.secondary().isEmpty());
+            .as("Two CODE activities should group together when sharing URLs")
+            .hasSize(1);
+        assertThat(groups.get(0).secondary()).hasSize(1);
     }
 
     @Test
@@ -151,7 +151,7 @@ class SimpleGrouperTest {
     }
 
     @Test
-    void testDiscussJoinsBestSubstantiveActivity() {
+    void testCodeAndDiscussGroupButReviewStaysSeparate() {
         String sharedUrl = "https://github.com/repo/issues/99";
 
         Activity prDefaultBranch = new Activity(
@@ -205,23 +205,19 @@ class SimpleGrouperTest {
         List<ActivityGroup> groups = SimpleGrouper.groupActivities(
             List.of(discuss, prFeatureBranch, review, prDefaultBranch));
 
-        // 3 substantive activities stay separate; discuss joins the best one (default-branch PR)
-        assertThat(groups).hasSize(3);
+        // CODE activities and DISCUSS group together; REVIEW stays separate
+        assertThat(groups).hasSize(2);
 
-        ActivityGroup defaultBranchGroup = groups.stream()
-            .filter(g -> g.primary() == prDefaultBranch)
+        ActivityGroup codeGroup = groups.stream()
+            .filter(g -> g.primary().actionCategory() == ActionCategory.CODE)
             .findFirst().orElseThrow();
-        assertThat(defaultBranchGroup.secondary()).containsExactly(discuss);
+        assertThat(codeGroup.primary()).isSameAs(prDefaultBranch);
+        assertThat(codeGroup.secondary()).contains(prFeatureBranch, discuss);
 
-        assertThat(groups.stream()
-            .filter(g -> g.primary() == prFeatureBranch)
-            .findFirst().orElseThrow()
-            .secondary()).isEmpty();
-
-        assertThat(groups.stream()
-            .filter(g -> g.primary() == review)
-            .findFirst().orElseThrow()
-            .secondary()).isEmpty();
+        ActivityGroup reviewGroup = groups.stream()
+            .filter(g -> g.primary().actionCategory() == ActionCategory.REVIEW)
+            .findFirst().orElseThrow();
+        assertThat(reviewGroup.secondary()).isEmpty();
     }
 
     @Test
@@ -247,34 +243,6 @@ class SimpleGrouperTest {
         );
 
         List<ActivityGroup> groups = SimpleGrouper.groupActivities(List.of(pr, issue));
-
-        assertThat(groups).hasSize(2)
-            .allMatch(g -> g.secondary().isEmpty());
-    }
-
-    @Test
-    void testUnconnectedMinorActivitiesStandAlone() {
-        Activity discuss1 = new Activity(
-            "GitHub",
-            "issue",
-            ActionCategory.DISCUSS,
-            "Issue A",
-            "",
-            "https://github.com/repo/issues/1",
-            Instant.now()
-        );
-
-        Activity discuss2 = new Activity(
-            "GitHub",
-            "issue",
-            ActionCategory.DISCUSS,
-            "Issue B",
-            "",
-            "https://github.com/repo/issues/2",
-            Instant.now()
-        );
-
-        List<ActivityGroup> groups = SimpleGrouper.groupActivities(List.of(discuss1, discuss2));
 
         assertThat(groups).hasSize(2)
             .allMatch(g -> g.secondary().isEmpty());
@@ -310,5 +278,54 @@ class SimpleGrouperTest {
 
         assertThat(groups).hasSize(1);
         assertThat(groups.get(0).secondary()).hasSize(1);
+    }
+
+    @Test
+    void testDiscussDoesNotBridgeCodeAndReview() {
+        Activity code = new Activity(
+            "GitHub",
+            "pull_request",
+            ActionCategory.CODE,
+            "My PR",
+            "",
+            "https://github.com/repo/pull/1",
+            Instant.now(),
+            List.of("https://github.com/repo/issues/10")
+        );
+
+        Activity discuss = new Activity(
+            "GitHub",
+            "issue",
+            ActionCategory.DISCUSS,
+            "Issue discussion",
+            "",
+            "https://github.com/repo/issues/10",
+            Instant.now(),
+            List.of("https://github.com/repo/pull/2")
+        );
+
+        Activity review = new Activity(
+            "GitHub",
+            "pull_request",
+            ActionCategory.REVIEW,
+            "Reviewed someone else's PR",
+            "",
+            "https://github.com/repo/pull/2",
+            Instant.now()
+        );
+
+        List<ActivityGroup> groups = SimpleGrouper.groupActivities(List.of(code, discuss, review));
+
+        // DISCUSS connects to both CODE and REVIEW via URLs, but merging
+        // all three would mix CODE and REVIEW. The DISCUSS joins whichever
+        // group it connects to first; the other stays separate.
+        assertThat(groups).hasSize(2);
+        assertThat(groups.stream().noneMatch(g -> {
+            boolean hasCode = g.primary().actionCategory() == ActionCategory.CODE
+                || g.secondary().stream().anyMatch(a -> a.actionCategory() == ActionCategory.CODE);
+            boolean hasReview = g.primary().actionCategory() == ActionCategory.REVIEW
+                || g.secondary().stream().anyMatch(a -> a.actionCategory() == ActionCategory.REVIEW);
+            return hasCode && hasReview;
+        })).as("No group should contain both CODE and REVIEW").isTrue();
     }
 }
