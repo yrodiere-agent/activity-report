@@ -7,18 +7,19 @@ import org.junit.jupiter.api.Test;
 import java.time.Instant;
 import java.util.List;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.api.Assertions.*;
 
 /**
- * Integration tests demonstrating cross-provider grouping via URL extraction
+ * Integration tests demonstrating cross-provider grouping via URL extraction.
+ * Activities sharing URLs group together, but CODE and REVIEW never mix
+ * in the same group.
  */
 class CrossProviderGroupingTest {
 
     @Test
     void testZulipJiraAndGitHubGroupTogether() {
-        // Scenario: Discussion in Zulip mentions JIRA issue, which references GitHub PR
-        // All three should group together via transitive URL matching
-
+        // All three share the same category family (CODE + CODE + DISCUSS) so they can group
         Activity githubPR = new Activity(
             "GitHub - github.com",
             "pull_request",
@@ -29,7 +30,6 @@ class CrossProviderGroupingTest {
             Instant.now()
         );
 
-        // JIRA issue that references the GitHub PR
         Activity jiraIssue = new Activity(
             "JIRA - company",
             "issue",
@@ -41,8 +41,6 @@ class CrossProviderGroupingTest {
             List.of("https://github.com/owner/repo/pull/123")
         );
 
-        // Zulip discussion that mentions the JIRA issue key
-        // The UrlExtractor would have converted "PROJ-456" to the full JIRA URL
         Activity zulipTopic = new Activity(
             "Zulip - example.zulipchat.com",
             "topic",
@@ -53,7 +51,7 @@ class CrossProviderGroupingTest {
             Instant.now(),
             List.of(
                 "https://example.zulipchat.com/#narrow/stream/development/topic/Sprint.20planning/near/12345",
-                "https://jira.example.com/browse/PROJ-456" // Extracted from "Working on PROJ-456"
+                "https://jira.example.com/browse/PROJ-456"
             )
         );
 
@@ -61,59 +59,39 @@ class CrossProviderGroupingTest {
             List.of(githubPR, jiraIssue, zulipTopic)
         );
 
-        // All three should group together:
-        // - Zulip → JIRA (both reference PROJ-456 URL)
-        // - JIRA → GitHub (JIRA references GitHub PR)
-        // - Transitive closure groups all three
-        assertEquals(1, groups.size(), "All three activities should group together");
-        ActivityGroup group = groups.get(0);
-        assertEquals(2, group.secondary().size());
+        assertEquals(1, groups.size(), "All three activities should group together (no CODE/REVIEW conflict)");
+        assertEquals(2, groups.get(0).secondary().size());
     }
 
     @Test
-    void testZulipReferencesMultipleExternalSystems() {
+    void testCodeAndReviewStaySeparateAcrossProviders() {
         Activity githubPR = new Activity(
             "GitHub - github.com",
             "pull_request",
             ActionCategory.CODE,
-            "owner/repo#123: Fix bug",
+            "owner/repo#123: Implement feature",
             "",
             "https://github.com/owner/repo/pull/123",
             Instant.now()
         );
 
-        Activity jiraIssue = new Activity(
-            "JIRA - company",
-            "issue",
-            ActionCategory.DISCUSS,
-            "BUG-789: Fix production issue",
+        Activity reviewedPR = new Activity(
+            "GitHub - github.com",
+            "pull_request",
+            ActionCategory.REVIEW,
+            "owner/repo#456: Someone else's feature",
             "",
-            "https://jira.example.com/browse/BUG-789",
-            Instant.now()
-        );
-
-        // Zulip topic that references both GitHub and JIRA
-        Activity zulipTopic = new Activity(
-            "Zulip - example.zulipchat.com",
-            "topic",
-            ActionCategory.DISCUSS,
-            "incidents / Production hotfix",
-            "",
-            "https://example.zulipchat.com/#narrow/stream/incidents/topic/Production.20hotfix",
+            "https://github.com/owner/repo/pull/456",
             Instant.now(),
-            List.of(
-                "https://github.com/owner/repo/pull/123",
-                "https://jira.example.com/browse/BUG-789"
-            )
+            List.of("https://github.com/owner/repo/pull/123")
         );
 
         List<ActivityGroup> groups = SimpleGrouper.groupActivities(
-            List.of(githubPR, jiraIssue, zulipTopic)
+            List.of(githubPR, reviewedPR)
         );
 
-        // All three should group - Zulip links them together
-        assertEquals(1, groups.size());
-        assertEquals(2, groups.get(0).secondary().size());
+        assertEquals(2, groups.size(), "CODE and REVIEW should stay in separate groups");
+        assertTrue(groups.stream().allMatch(g -> g.secondary().isEmpty()));
     }
 
     @Test

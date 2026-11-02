@@ -7,7 +7,11 @@ import java.util.*;
 import java.util.stream.Collectors;
 
 /**
- * Simple URL-based activity grouper (fallback when AI is not available)
+ * Simple URL-based activity grouper (fallback when AI is not available).
+ * <p>
+ * Activities sharing URLs are grouped together via transitive closure,
+ * with one constraint: a group may not contain both CODE and REVIEW
+ * activities, since those represent different kinds of work.
  */
 public class SimpleGrouper {
 
@@ -22,6 +26,17 @@ public class SimpleGrouper {
 
     private static final Comparator<Activity> ACTIVITY_PRIORITY =
         Comparator.comparingInt(SimpleGrouper::activityPriorityRank);
+
+    private static boolean wouldMixCodeAndReview(Set<Activity> group) {
+        boolean hasCode = false;
+        boolean hasReview = false;
+        for (Activity a : group) {
+            if (a.actionCategory() == ActionCategory.CODE) hasCode = true;
+            else if (a.actionCategory() == ActionCategory.REVIEW) hasReview = true;
+            if (hasCode && hasReview) return true;
+        }
+        return false;
+    }
 
     public static List<ActivityGroup> groupActivities(List<Activity> activities) {
         // Build URL -> Activities map
@@ -46,25 +61,45 @@ public class SimpleGrouper {
             }
         }
 
-        // Merge groups that share activities (transitive closure)
+        // Merge groups that share activities (transitive closure),
+        // but never merge two groups if the result would contain
+        // both CODE and REVIEW activities.
         Map<Activity, Set<Activity>> activityToGroup = new HashMap<>();
 
         for (Set<Activity> relatedActivities : urlToActivities.values()) {
             if (relatedActivities.size() < 2) {
-                continue; // Not a group, just a single activity
+                continue;
             }
 
-            // Find all existing groups that contain any of these activities
-            Set<Activity> mergedGroup = new HashSet<>(relatedActivities);
-            for (Activity activity : relatedActivities) {
-                if (activityToGroup.containsKey(activity)) {
-                    mergedGroup.addAll(activityToGroup.get(activity));
+            List<Activity> related = new ArrayList<>(relatedActivities);
+            related.sort(ACTIVITY_PRIORITY);
+            for (int i = 0; i < related.size(); i++) {
+                for (int j = i + 1; j < related.size(); j++) {
+                    Activity a = related.get(i);
+                    Activity b = related.get(j);
+
+                    Set<Activity> groupA = activityToGroup.get(a);
+                    Set<Activity> groupB = activityToGroup.get(b);
+
+                    if (groupA != null && groupA == groupB) {
+                        continue;
+                    }
+
+                    // Build candidate merged group and check constraint
+                    Set<Activity> candidate = new HashSet<>();
+                    candidate.add(a);
+                    candidate.add(b);
+                    if (groupA != null) candidate.addAll(groupA);
+                    if (groupB != null) candidate.addAll(groupB);
+
+                    if (wouldMixCodeAndReview(candidate)) {
+                        continue;
+                    }
+
+                    for (Activity activity : candidate) {
+                        activityToGroup.put(activity, candidate);
+                    }
                 }
-            }
-
-            // Update all activities in the merged group to point to the same group
-            for (Activity activity : mergedGroup) {
-                activityToGroup.put(activity, mergedGroup);
             }
         }
 

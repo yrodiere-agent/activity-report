@@ -258,7 +258,10 @@ public class ActivityReportCommand implements Runnable {
             // Generate report
             ProgressLog.blank();
             ProgressLog.section("Generating report...");
-            String report = MarkdownReportGenerator.generate(groups);
+            List<String> projectOrder = config.projects()
+                .map(projects -> projects.stream().map(AppConfig.Project::name).toList())
+                .orElse(List.of());
+            String report = MarkdownReportGenerator.generate(groups, projectOrder);
 
             // Write report to file
             Path outputPath = writeReportToFile(report, startDate, endDate);

@@ -666,6 +666,20 @@ public class GitHubProvider implements ActivityProvider {
                             Log.tracef("Failed to determine default branch for %s#%d: %s",
                                 ref.repoFullName, ref.number, e.getMessage());
                         }
+                        try {
+                            if (pr.isMerged()) {
+                                activity.addMetadata("prStatus", "Merged");
+                            } else if (pr.getState() == GHIssueState.CLOSED) {
+                                activity.addMetadata("prStatus", "Closed");
+                            } else if (!pr.getCreatedAt().toInstant().isBefore(startDate)) {
+                                activity.addMetadata("prStatus", "Started");
+                            } else {
+                                activity.addMetadata("prStatus", "Continued");
+                            }
+                        } catch (Exception e) {
+                            Log.tracef("Failed to determine PR status for %s#%d: %s",
+                                ref.repoFullName, ref.number, e.getMessage());
+                        }
                     }
 
                     // Add default project if configured
