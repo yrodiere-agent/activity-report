@@ -38,7 +38,7 @@ class MarkdownReportGeneratorTest {
                         codeActivity("PR two", "https://github.com/r/pull/2", null, "Alpha"),
                         List.of()));
 
-        String report = MarkdownReportGenerator.generate(groups);
+        String report = MarkdownReportGenerator.generate(groups, List.of());
 
         assertThat(report).isEqualTo("""
                 # General
@@ -67,7 +67,7 @@ class MarkdownReportGeneratorTest {
                         codeActivity("PR two", "https://github.com/r/pull/2", null, "Alpha"),
                         List.of()));
 
-        String report = MarkdownReportGenerator.generate(groups);
+        String report = MarkdownReportGenerator.generate(groups, List.of());
 
         assertThat(report).isEqualTo("""
                 # General
@@ -96,7 +96,7 @@ class MarkdownReportGeneratorTest {
                         codeActivity("PR two", "https://github.com/r/pull/2", null, "Alpha"),
                         List.of()));
 
-        String report = MarkdownReportGenerator.generate(groups);
+        String report = MarkdownReportGenerator.generate(groups, List.of());
 
         assertThat(report).isEqualTo("""
                 # General
@@ -126,7 +126,7 @@ class MarkdownReportGeneratorTest {
                         codeActivity("PR two", "https://github.com/r/pull/2", null, "Alpha"),
                         List.of()));
 
-        String report = MarkdownReportGenerator.generate(groups);
+        String report = MarkdownReportGenerator.generate(groups, List.of());
 
         assertThat(report).isEqualTo("""
                 # General
@@ -159,7 +159,7 @@ class MarkdownReportGeneratorTest {
                         List.of(
                                 discussActivity("Discussion", "https://github.com/r/issues/20"))));
 
-        String report = MarkdownReportGenerator.generate(groups);
+        String report = MarkdownReportGenerator.generate(groups, List.of());
 
         assertThat(report).isEqualTo("""
                 # General
@@ -187,7 +187,7 @@ class MarkdownReportGeneratorTest {
                         codeActivity("Some work", null, null, "Alpha"),
                         List.of()));
 
-        String report = MarkdownReportGenerator.generate(groups);
+        String report = MarkdownReportGenerator.generate(groups, List.of());
 
         assertThat(report).isEqualTo("""
                 # General
@@ -214,7 +214,7 @@ class MarkdownReportGeneratorTest {
                         discussActivity("Discussed issue", "https://github.com/r/issues/9"),
                         List.of()));
 
-        String report = MarkdownReportGenerator.generate(groups);
+        String report = MarkdownReportGenerator.generate(groups, List.of());
 
         assertThat(report).isEqualTo("""
                 # General
@@ -233,5 +233,46 @@ class MarkdownReportGeneratorTest {
 
                 * [Discussed issue](https://github.com/r/issues/9)
                 """);
+    }
+
+    @Test
+    void projectOrderFollowsConfiguration() {
+        var groups = List.of(
+                new ActivityGroup(
+                        codeActivity("PR in Zeta", "https://github.com/z/pull/1", null, "Zeta"),
+                        List.of()),
+                new ActivityGroup(
+                        codeActivity("PR in Alpha", "https://github.com/a/pull/1", null, "Alpha"),
+                        List.of()),
+                new ActivityGroup(
+                        codeActivity("PR in Beta", "https://github.com/b/pull/1", null, "Beta"),
+                        List.of()));
+
+        String report = MarkdownReportGenerator.generate(groups, List.of("Alpha", "Beta", "Zeta"));
+
+        int alphaPos = report.indexOf("# Project: Alpha");
+        int betaPos = report.indexOf("# Project: Beta");
+        int zetaPos = report.indexOf("# Project: Zeta");
+
+        assertThat(alphaPos).isLessThan(betaPos);
+        assertThat(betaPos).isLessThan(zetaPos);
+    }
+
+    @Test
+    void unconfiguredProjectsAppearAfterConfiguredOnes() {
+        var groups = List.of(
+                new ActivityGroup(
+                        codeActivity("PR in Unknown", "https://github.com/u/pull/1", null, "Unknown"),
+                        List.of()),
+                new ActivityGroup(
+                        codeActivity("PR in Alpha", "https://github.com/a/pull/1", null, "Alpha"),
+                        List.of()));
+
+        String report = MarkdownReportGenerator.generate(groups, List.of("Alpha"));
+
+        int alphaPos = report.indexOf("# Project: Alpha");
+        int unknownPos = report.indexOf("# Project: Unknown");
+
+        assertThat(alphaPos).isLessThan(unknownPos);
     }
 }

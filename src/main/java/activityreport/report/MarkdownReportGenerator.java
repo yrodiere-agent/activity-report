@@ -10,12 +10,15 @@ import java.util.*;
  */
 public class MarkdownReportGenerator {
 
-    public static String generate(List<ActivityGroup> groups) {
+    public static String generate(List<ActivityGroup> groups, List<String> projectOrder) {
         StringBuilder report = new StringBuilder();
 
-        // Organize groups by project
+        // Organize groups by project, preserving configuration order
         Map<String, List<ActivityGroup>> byProject = new LinkedHashMap<>();
         byProject.put("General", new ArrayList<>()); // Always empty, manually filled
+        for (String project : projectOrder) {
+            byProject.put(project, new ArrayList<>());
+        }
 
         List<ActivityGroup> reviewGroups = new ArrayList<>();
         List<ActivityGroup> triageDiscussGroups = new ArrayList<>();
