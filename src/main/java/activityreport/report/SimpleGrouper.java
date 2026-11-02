@@ -72,6 +72,7 @@ public class SimpleGrouper {
             }
 
             List<Activity> related = new ArrayList<>(relatedActivities);
+            related.sort(ACTIVITY_PRIORITY);
             for (int i = 0; i < related.size(); i++) {
                 for (int j = i + 1; j < related.size(); j++) {
                     Activity a = related.get(i);
