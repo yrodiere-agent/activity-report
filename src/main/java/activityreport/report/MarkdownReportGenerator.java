@@ -101,11 +101,16 @@ public class MarkdownReportGenerator {
     private static void formatGroup(StringBuilder report, ActivityGroup group) {
         Activity primary = group.primary();
 
-        // Primary activity line with link
+        // Primary activity line with optional status prefix and link
+        String statusPrefix = "";
+        Object prStatus = primary.metadata().get("prStatus");
+        if (prStatus instanceof String s) {
+            statusPrefix = "[" + s + "] ";
+        }
         if (primary.url() != null && !primary.url().isEmpty()) {
-            report.append(String.format("* [%s](%s)\n", primary.title(), primary.url()));
+            report.append(String.format("* %s[%s](%s)\n", statusPrefix, primary.title(), primary.url()));
         } else {
-            report.append(String.format("* %s\n", primary.title()));
+            report.append(String.format("* %s%s\n", statusPrefix, primary.title()));
         }
 
         // Add description if present

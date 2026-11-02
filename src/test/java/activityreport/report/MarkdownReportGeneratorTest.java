@@ -5,7 +5,9 @@ import activityreport.model.Activity;
 import org.junit.jupiter.api.Test;
 
 import java.time.Instant;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -274,5 +276,44 @@ class MarkdownReportGeneratorTest {
         int unknownPos = report.indexOf("# Project: Unknown");
 
         assertThat(alphaPos).isLessThan(unknownPos);
+    }
+
+    @Test
+    void prStatusPrefixRendered() {
+        Activity started = new Activity("GitHub", "pull_request", ActionCategory.CODE,
+                "New PR", null, "https://github.com/r/pull/1", NOW,
+                List.of(), "Alpha", new HashMap<>(Map.of("prStatus", "Started")));
+        Activity continued = new Activity("GitHub", "pull_request", ActionCategory.CODE,
+                "Ongoing PR", null, "https://github.com/r/pull/2", NOW,
+                List.of(), "Alpha", new HashMap<>(Map.of("prStatus", "Continued")));
+        Activity merged = new Activity("GitHub", "pull_request", ActionCategory.CODE,
+                "Done PR", null, "https://github.com/r/pull/3", NOW,
+                List.of(), "Alpha", new HashMap<>(Map.of("prStatus", "Merged")));
+
+        var groups = List.of(
+                new ActivityGroup(started, List.of()),
+                new ActivityGroup(continued, List.of()),
+                new ActivityGroup(merged, List.of()));
+
+        String report = MarkdownReportGenerator.generate(groups, List.of("Alpha"));
+
+        assertThat(report).contains("* [Started] [New PR](https://github.com/r/pull/1)");
+        assertThat(report).contains("* [Continued] [Ongoing PR](https://github.com/r/pull/2)");
+        assertThat(report).contains("* [Merged] [Done PR](https://github.com/r/pull/3)");
+    }
+
+    @Test
+    void noPrefixWithoutPrStatus() {
+        var groups = List.of(
+                new ActivityGroup(
+                        codeActivity("Some PR", "https://github.com/r/pull/1", null, "Alpha"),
+                        List.of()));
+
+        String report = MarkdownReportGenerator.generate(groups, List.of("Alpha"));
+
+        assertThat(report).contains("* [Some PR](https://github.com/r/pull/1)");
+        assertThat(report).doesNotContain("[Started]");
+        assertThat(report).doesNotContain("[Continued]");
+        assertThat(report).doesNotContain("[Merged]");
     }
 }
