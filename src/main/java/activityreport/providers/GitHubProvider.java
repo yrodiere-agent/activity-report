@@ -669,6 +669,8 @@ public class GitHubProvider implements ActivityProvider {
                         try {
                             if (pr.isMerged()) {
                                 activity.addMetadata("prStatus", "Merged");
+                            } else if (pr.getState() == GHIssueState.CLOSED) {
+                                activity.addMetadata("prStatus", "Closed");
                             } else if (!pr.getCreatedAt().toInstant().isBefore(startDate)) {
                                 activity.addMetadata("prStatus", "Started");
                             } else {

@@ -289,17 +289,22 @@ class MarkdownReportGeneratorTest {
         Activity merged = new Activity("GitHub", "pull_request", ActionCategory.CODE,
                 "Done PR", null, "https://github.com/r/pull/3", NOW,
                 List.of(), "Alpha", new HashMap<>(Map.of("prStatus", "Merged")));
+        Activity closed = new Activity("GitHub", "pull_request", ActionCategory.CODE,
+                "Rejected PR", null, "https://github.com/r/pull/4", NOW,
+                List.of(), "Alpha", new HashMap<>(Map.of("prStatus", "Closed")));
 
         var groups = List.of(
                 new ActivityGroup(started, List.of()),
                 new ActivityGroup(continued, List.of()),
-                new ActivityGroup(merged, List.of()));
+                new ActivityGroup(merged, List.of()),
+                new ActivityGroup(closed, List.of()));
 
         String report = MarkdownReportGenerator.generate(groups, List.of("Alpha"));
 
         assertThat(report).contains("* [Started] [New PR](https://github.com/r/pull/1)");
         assertThat(report).contains("* [Continued] [Ongoing PR](https://github.com/r/pull/2)");
         assertThat(report).contains("* [Merged] [Done PR](https://github.com/r/pull/3)");
+        assertThat(report).contains("* [Closed] [Rejected PR](https://github.com/r/pull/4)");
     }
 
     @Test
