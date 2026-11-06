@@ -371,7 +371,7 @@ public class ActivityReportCommand implements Runnable {
     }
 
     /**
-     * Open the report file using xdg-open.
+     * Open the report file using a configured command or xdg-open as default.
      */
     private void openInEditor(Path filePath) {
         ProgressLog.info("Report file: %s", filePath);
@@ -379,10 +379,15 @@ public class ActivityReportCommand implements Runnable {
         try {
             ProgressLog.info("Opening report...");
 
-            ProcessBuilder pb = new ProcessBuilder("xdg-open", filePath.toString());
+            ProcessBuilder pb;
+            if (config.open().flatMap(AppConfig.Open::command).isPresent()) {
+                String command = activityreport.util.OpenCommandBuilder.substituteCommand(
+                        config.open().get().command().get(), filePath);
+                pb = new ProcessBuilder("sh", "-c", command);
+            } else {
+                pb = new ProcessBuilder("xdg-open", filePath.toString());
+            }
             pb.start();
-
-            // Don't wait for the application to close - xdg-open will launch it and return immediately
 
         } catch (IOException e) {
             Log.warnf("Failed to open file: %s", e.getMessage());

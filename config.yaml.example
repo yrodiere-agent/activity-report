@@ -72,4 +72,8 @@ projects:
     url-patterns:
       - "https://github.com/hibernate/hibernate.org/*"
 
+# Report opening behavior (optional, defaults to xdg-open)
+# open:
+#   command: "code {dir}"  # Placeholders: {file} = report path, {dir} = report directory
+
 # See README.md for detailed setup instructions, token creation, and credential management

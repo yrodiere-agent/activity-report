@@ -27,6 +27,12 @@ public interface AppConfig {
 
     Optional<List<@Valid Project>> projects();
 
+    Optional<Open> open();
+
+    interface Open {
+        Optional<String> command();
+    }
+
     interface Providers {
         Optional<@Valid Github> github();
         Optional<@Valid Jira> jira();

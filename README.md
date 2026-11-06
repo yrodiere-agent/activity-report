@@ -295,9 +295,28 @@ report --no-ai
 
 ### Opening the Report
 
-The report is automatically opened using `xdg-open`, which will use your system's default application for markdown files. This could be a text editor, IDE, or markdown viewer depending on your system configuration.
+By default, the report is automatically opened using `xdg-open`, which will use your system's default application for markdown files.
 
-If `xdg-open` is not available or fails, the file path will be displayed for manual opening.
+You can customize this behavior by setting `open.command` in your config file. The command is executed via `sh -c` and supports two placeholders:
+
+- `{file}` — the full path to the generated report file
+- `{dir}` — the directory containing the report file
+
+For example, to open the report directory in VS Code:
+
+```yaml
+open:
+  command: "code {dir}"
+```
+
+Or to open the file in a specific editor:
+
+```yaml
+open:
+  command: "vim {file}"
+```
+
+If the command is not configured and `xdg-open` is not available or fails, the file path will be displayed for manual opening.
 
 ### Report Location
 
